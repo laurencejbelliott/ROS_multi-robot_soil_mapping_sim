@@ -1,0 +1,9 @@
+[submodule "Multi-Robots-Navigation-in-Stage-Ros"]
+	path = Multi-Robots-Navigation-in-Stage-Ros
+	url = https://github.com/Hongyi-Zhou/Multi-Robots-Navigation-in-Stage-Ros.git
+[submodule "cbpae"]
+	path = cbpae
+	url = https://github.com/gpdas/cbpae.git
+[submodule "Thorvald-Spatial-Sampling-Sim"]
+	path = Thorvald-Spatial-Sampling-Sim
+	url = https://github.com/laurencejbelliott/Thorvald-Spatial-Sampling-Sim.git
