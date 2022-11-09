@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 import numpy as np
 import pickle
+
 with open('../include/stage_soil_mapping_mrs/ground_truth/interpolated_jaime_compaction_0cm_kpas.pickle', 'rb') as f:
     ground_truth = pickle.load(f)
 
