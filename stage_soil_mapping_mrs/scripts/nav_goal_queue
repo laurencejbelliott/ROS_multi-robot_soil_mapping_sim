@@ -4,16 +4,17 @@ import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String
 
-# TODO: Rewrite this node from the LAR/leo_rover to queue sampling goals and execute them in order.
-#  With that done, add
+# TODO: add
 #  - Removing goals
 #  - Insertion heuristic
 rospy.init_node('nav_goal_queue')
-client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+namespace = rospy.get_namespace()
+print(namespace)
+client = actionlib.SimpleActionClient(namespace+'move_base', MoveBaseAction)
 client.wait_for_server()
 
 goal_queue = []
-goal_queue_pub = rospy.Publisher('/nav_goal_queue/goal_queue', String, queue_size=1)
+goal_queue_pub = rospy.Publisher(namespace+'nav_goal_queue/goal_queue', String, queue_size=1)
 
 
 def queue_nav_goal_callback(data):
@@ -35,7 +36,7 @@ def queue_nav_goal_callback(data):
 
 
 def queue_nav_goal_listener():
-    rospy.Subscriber('nav_goal_queue/add_goal', MoveBaseGoal, queue_nav_goal_callback)
+    rospy.Subscriber(namespace+'nav_goal_queue/add_goal', MoveBaseGoal, queue_nav_goal_callback)
 
     while not rospy.is_shutdown():
         if len(goal_queue) > 0:
