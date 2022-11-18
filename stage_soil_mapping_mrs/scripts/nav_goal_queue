@@ -4,9 +4,7 @@ import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String
 
-# TODO: add
-#  - Removing goals
-#  - Insertion heuristic
+
 rospy.init_node('nav_goal_queue')
 namespace = rospy.get_namespace()
 print(namespace)
@@ -23,7 +21,7 @@ def queue_nav_goal_callback(data):
 
     goal_queue.append(data)
 
-    # Human readable goal queue
+    # Human-readable goal queue
     goal_queue_hr = []
     for goal in goal_queue:
         goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
@@ -38,13 +36,29 @@ def queue_nav_goal_callback(data):
 def queue_nav_goal_listener():
     rospy.Subscriber(namespace+'nav_goal_queue/add_goal', MoveBaseGoal, queue_nav_goal_callback)
 
+    r = rospy.Rate(1)
     while not rospy.is_shutdown():
         if len(goal_queue) > 0:
-            goal = goal_queue.pop(0)
+            # Publish human-readable goal queue
+            goal_queue_hr = []
+            for goal in goal_queue:
+                goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+            goal_queue_pub.publish(str(goal_queue_hr))
+
+            goal = goal_queue[0]
             client.send_goal(goal)
             rospy.loginfo("Executing goal: " + str(goal.target_pose.pose.position))
             client.wait_for_result()
+            goal_queue.pop(0)
 
+            # Publish the human-readable goal queue without the completed goal
+            goal_queue_hr = []
+            for goal in goal_queue:
+                goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+            goal_queue_pub.publish(str(goal_queue_hr))
+        else:
+            goal_queue_pub.publish(str([]))
+        r.sleep()
     rospy.spin()
 
 
