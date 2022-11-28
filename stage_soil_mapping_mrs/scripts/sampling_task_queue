@@ -1,0 +1,104 @@
+#!/usr/bin/env python
+import math
+import rospy
+import rospkg
+import actionlib
+import pickle
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from std_msgs.msg import String
+# TODO: Add rospy_message_converter to dependencies
+from rospy_message_converter import message_converter
+
+# TODO:
+#  - Retry failed goals x times, then cancel goal and remove from queue
+#  - Insertion heuristic
+
+rospack = rospkg.RosPack()
+package_path = rospack.get_path('stage_soil_mapping_mrs')
+node_name = 'sampling_task_queue'
+rospy.init_node(node_name)
+namespace = rospy.get_namespace()
+print(namespace)
+client = actionlib.SimpleActionClient(namespace+'move_base', MoveBaseAction)
+client.wait_for_server()
+
+goal_queue = []
+goal_queue_pub = rospy.Publisher(namespace+node_name+"/goal_queue", String, queue_size=1)
+
+
+def queue_nav_goal_callback(data):
+    rospy.loginfo("New goal received: " + str(data.target_pose.pose.position.x) + "," +
+                  str(data.target_pose.pose.position.y))
+
+    goal_queue.append(data)
+
+    # Human-readable goal queue
+    goal_queue_hr = []
+    for goal in goal_queue:
+        goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+
+    if len(goal_queue) > 0:
+        goal_queue_pub.publish(str(goal_queue_hr))
+        rospy.loginfo("\nNav goal queue:")
+        for g in range(len(goal_queue)):
+            rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
+
+
+def queue_nav_goal_listener():
+    rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
+
+    r = rospy.Rate(1)
+    while not rospy.is_shutdown():
+        if len(goal_queue) > 0:
+            # Publish human-readable goal queue
+            goal_queue_hr = []
+            for goal in goal_queue:
+                goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+            goal_queue_pub.publish(str(goal_queue_hr))
+
+            goal = goal_queue[0]
+            client.send_goal(goal)
+            rospy.loginfo("Executing goal: " + str(goal.target_pose.pose.position))
+
+            rospy.loginfo("Sending navigation goal for sampling position...")
+            wait = client.wait_for_result()
+
+            if not wait:
+                rospy.logerr("Cannot reach navigation server!")
+            else:
+                state = client.get_state()
+                if state == 3:
+                    # If nav. was successful, stop for 5 seconds and read data indexed by position
+                    rospy.loginfo("Taking penetrometer reading...")
+                    pose_x = goal.target_pose.pose.position.x
+                    pose_y = goal.target_pose.pose.position.y
+                    data_x, data_y = math.floor(pose_x), math.floor(pose_y)
+                    rospy.sleep(5)
+                    mock_reading = mock_pen_data[data_y, data_x]
+                    reading_dict = {'robot_id': namespace.strip("/"), 'x': pose_x, 'y': pose_y, 'reading': mock_reading}
+                    rospy.loginfo(namespace[1:-1] + " sampled " + str(reading_dict))
+                    reading_msg = message_converter.convert_dictionary_to_ros_message('std_msgs/String',
+                                                                                      {'data': str(reading_dict)})
+                    mock_pen_reading_pub.publish(reading_msg)
+                else:
+                    rospy.logerr("Navigation goal failed!")
+
+            goal_queue.pop(0)
+
+            # Publish the human-readable goal queue without the completed goal
+            goal_queue_hr = []
+            for goal in goal_queue:
+                goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+            goal_queue_pub.publish(str(goal_queue_hr))
+        else:
+            goal_queue_pub.publish(str([]))
+        r.sleep()
+    rospy.spin()
+
+
+if __name__ == '__main__':
+    with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolated_jaime_compaction_0cm_kpas.pickle',
+              'rb') as f:
+        mock_pen_data = pickle.load(f)
+    mock_pen_reading_pub = rospy.Publisher(namespace + node_name + "/mock_pen_reading", String, queue_size=1)
+    queue_nav_goal_listener()
