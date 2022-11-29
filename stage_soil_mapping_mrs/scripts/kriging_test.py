@@ -10,9 +10,9 @@ with open('../include/stage_soil_mapping_mrs/ground_truth/interpolated_jaime_com
 
 plt.imshow(ground_truth, origin='lower')
 plt.title("Ground Truth")
-# plt.show(block=False)
-plt.show()
-# plt.pause(2)
+plt.show(block=False)
+# plt.show()
+plt.pause(2)
 plt.close()
 
 sampled_points = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * np.nan
@@ -65,6 +65,6 @@ m, v = predict_by_kriging(y_grid, x_grid, y_arr, x_arr, o_arr, variogram=variogr
 plt.close()
 plt.imshow(m, origin="lower")
 plt.title("Interpolated Points")
-# plt.show(block=False)
-# plt.pause(10)
+plt.show(block=False)
+plt.pause(10)
 plt.close()

@@ -6,7 +6,7 @@ import actionlib
 import pickle
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String
-# TODO: Add rospy_message_converter to dependencies
+# TODO: Add rospy_message_converter to rosdep dependencies
 from rospy_message_converter import message_converter
 
 # TODO:

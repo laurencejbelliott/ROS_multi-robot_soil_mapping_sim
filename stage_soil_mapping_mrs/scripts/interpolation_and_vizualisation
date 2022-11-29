@@ -1,0 +1,109 @@
+#!/usr/bin/env python
+__author__ = "Laurence Roberts-Elliott"
+
+import numpy as np
+import pickle
+import rospy
+import rospkg
+import json
+from matplotlib import pyplot as plt
+from kriging_utils.kriging import predict_by_kriging
+from std_msgs.msg import String
+import matplotlib
+matplotlib.use('Qt5Agg')
+
+rospack = rospkg.RosPack()
+package_path = rospack.get_path('stage_soil_mapping_mrs')
+with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolated_jaime_compaction_0cm_kpas.pickle', 'rb') as f:
+    ground_truth = pickle.load(f)
+
+node_name = 'interpolation_and_vizualisation'
+namespace = rospy.get_namespace()
+
+
+# Define parameters (Explanations are in kriging.py)
+
+# Use Gaussian variogram model
+variogram = 'gaussian'
+
+# Set kriging grid dimensions to those the environment
+x_grid = np.arange(0, ground_truth.shape[0], 1)
+y_grid = np.arange(0, ground_truth.shape[1], 1)
+
+# Define location and data of sampled points
+x_arr = []
+y_arr = []
+o_arr = []
+
+
+def interpolate_and_visualise(data):
+    print("New sample data received:")
+
+    # Perform kriging interpolation from values sampled by the robots
+    # Parse json data
+    data = data.replace("'", '"')
+    data = json.loads(data)
+    rospy.loginfo("Robot ID: " + str(data["robot_id"]))
+    rospy.loginfo("X: " + str(data["x"]))
+    rospy.loginfo("Y: " + str(data["y"]))
+    rospy.loginfo("Reading: " + str(data["reading"]))
+
+    x_arr.append([data["x"]])
+    y_arr.append([data["y"]])
+    o_arr.append(float(data["reading"]))
+
+    # Need at least 3 points to interpolate
+    if len(x_arr) > 2:
+        # Run interpolation of sampled points
+        rospy.loginfo("Interpolating, please wait...")
+        m, v = predict_by_kriging(y_grid, x_grid, y_arr, x_arr, o_arr, variogram=variogram)
+
+        plt.close()
+        plt.imshow(m, origin="lower")
+        plt.title("Interpolation of " + str(len(x_arr)) + " samples")
+        plt.show(block=False)
+        plt.pause(1)
+        rospy.loginfo("Interpolation complete")
+    else:
+        rospy.loginfo("Need at least 3 points to interpolate, we have " + str(len(x_arr)))
+
+
+def new_sample_callback(data):
+    print("Received new sample: " + data.data)
+    interpolate_and_visualise(data.data)
+
+
+
+#
+# o_arr = np.array([sampled_points[i, j] for i in range(ground_truth.shape[0]) for j in range(ground_truth.shape[1]) if
+#                   not np.isnan(sampled_points[i, j])])
+#
+# print("Interpolating, please wait...")
+#
+# # print(len(x_arr))
+# # print(len(y_arr))
+# # print(len(o_arr))
+#
+# # print(x_arr.shape)
+# # print(y_arr.shape)
+# # print(o_arr.shape)
+# #
+# # print(x_arr[0])
+# # print(y_arr[0])
+# # print(o_arr[0])
+#
+
+if __name__ == '__main__':
+    rospy.init_node(node_name, anonymous=True)
+    rospy.loginfo('Kriging test node started')
+
+    # Get list of topics where robots publish their sampled values
+    topics = rospy.get_published_topics()
+    pen_reading_topics = [topic[0] for topic in topics if 'mock_pen_reading' in topic[0]]
+    rospy.loginfo("Subscribing to simulated penetrometer reading topics: " + str(pen_reading_topics))
+
+    for topic in pen_reading_topics:
+        rospy.Subscriber(topic, String, new_sample_callback)
+
+    # rospy.Subscriber(namespace + node_name + '/add_goal', MoveBaseGoal, queue_nav_goal_callback)
+    rospy.spin()
