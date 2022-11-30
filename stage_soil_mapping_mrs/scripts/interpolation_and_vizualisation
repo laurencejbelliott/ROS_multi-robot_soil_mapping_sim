@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String
 import matplotlib
-matplotlib.use('Qt5Agg')
+matplotlib.use('Agg')
 
 rospack = rospkg.RosPack()
 package_path = rospack.get_path('stage_soil_mapping_mrs')
@@ -34,6 +34,7 @@ y_grid = np.arange(0, ground_truth.shape[1], 1)
 x_arr = []
 y_arr = []
 o_arr = []
+id_arr = []
 
 
 def interpolate_and_visualise(data):
@@ -51,6 +52,13 @@ def interpolate_and_visualise(data):
     x_arr.append([data["x"]])
     y_arr.append([data["y"]])
     o_arr.append(float(data["reading"]))
+    id_arr.append(data["robot_id"])
+    c_arr = []
+    for i in range(len(id_arr)):
+        if id_arr[i] == "robot_0":
+            c_arr.append('r')
+        elif id_arr[i] == "robot_1":
+            c_arr.append('g')
 
     # Need at least 3 points to interpolate
     if len(x_arr) > 2:
@@ -59,8 +67,12 @@ def interpolate_and_visualise(data):
         m, v = predict_by_kriging(y_grid, x_grid, y_arr, x_arr, o_arr, variogram=variogram)
 
         plt.close()
+        plt.scatter(y_arr, x_arr, c=c_arr)
         plt.imshow(m, origin="lower")
         plt.title("Interpolation of " + str(len(x_arr)) + " samples")
+        plt.colorbar()
+        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/interpolated.png')
+        rospy.loginfo("Saved interpolation plot to " + package_path+"/include/stage_soil_mapping_mrs/interpolated.png")
         plt.show(block=False)
         plt.pause(1)
         rospy.loginfo("Interpolation complete")
@@ -69,7 +81,7 @@ def interpolate_and_visualise(data):
 
 
 def new_sample_callback(data):
-    print("Received new sample: " + data.data)
+    # print("Received new sample: " + data.data)
     interpolate_and_visualise(data.data)
 
 
