@@ -48,6 +48,7 @@ points = MultiPoint(np.transpose([np.tile(sample_grid_x, len(sample_grid_y)), np
                                                                                         len(sample_grid_x))]))
 # print("Points: {}".format(points))
 plt.imshow(ground_truth, origin="lower")
+plt.colorbar()
 plt.plot([point.x for point in points], [point.y for point in points], 'bo')
 plt.title("Ground truth with sampling grid")
 plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png')
@@ -99,7 +100,7 @@ def interpolate_and_visualise(data):
     if len(x_arr) > 2:
         # Run interpolation of sampled points
         rospy.loginfo("Interpolating, please wait...")
-        m, v = predict_by_kriging(x_grid, y_grid, y_arr, x_arr, o_arr, variogram=variogram)
+        m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
 
         plt.close()
         plt.scatter(x_arr, y_arr, c=c_arr)
@@ -153,7 +154,7 @@ if __name__ == '__main__':
         new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
                                        tcp_nodelay=True, latch=True)
         task_count = 0
-        for task in task_allocations[robot]:
+        for task in task_allocations[robot][::-1]:
             task_goal = MoveBaseGoal()
             task_goal.target_pose.header.frame_id = "map"
             task_goal.target_pose.pose.position.x = task[0]
