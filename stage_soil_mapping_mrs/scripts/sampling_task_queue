@@ -4,8 +4,10 @@ import rospy
 import rospkg
 import actionlib
 import pickle
+import copy
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String
+from geometry_msgs.msg import Pose
 # TODO: Add rospy_message_converter to rosdep dependencies
 from rospy_message_converter import message_converter
 
@@ -19,11 +21,19 @@ node_name = 'sampling_task_queue'
 rospy.init_node(node_name)
 namespace = rospy.get_namespace()
 print(namespace)
-client = actionlib.SimpleActionClient(namespace+'move_base', MoveBaseAction)
-client.wait_for_server()
+
+# Simplified navigation - teleports the robots to the goal positions after a delay calculated from the distance to the
+# goal and a constant velocity, this may be used to enable faster simulation, as move_base bottlenecked sim performance.
+# use_simplified_nav = rospy.get_param(namespace+node_name+'/use_simplified_nav')
+use_simplified_nav = True  # Simply set as `True` for now to debug. TODO: implement this as a ROS param, as above
+
+if not use_simplified_nav:
+    client = actionlib.SimpleActionClient(namespace+'move_base', MoveBaseAction)
+    client.wait_for_server()
 
 goal_queue = []
 goal_queue_pub = rospy.Publisher(namespace+node_name+"/goal_queue", String, queue_size=1)
+cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
 
 
 def queue_nav_goal_callback(data):
@@ -44,6 +54,27 @@ def queue_nav_goal_callback(data):
             rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
 
 
+def pub_mock_pen_reading(goal):
+    # If nav. was successful, stop for 5 seconds and read data indexed by position
+    rospy.loginfo("Taking penetrometer reading...")
+    if use_simplified_nav:
+        # TODO: Calculate this offset as half of the environment size, rather than hard-coding it
+        pose_x = goal.target_pose.pose.position.x
+        pose_y = goal.target_pose.pose.position.y
+        data_x, data_y = math.floor(pose_x), math.floor(pose_y)
+    else:
+        pose_x = goal.target_pose.pose.position.x
+        pose_y = goal.target_pose.pose.position.y
+        data_x, data_y = math.floor(pose_x), math.floor(pose_y)
+    rospy.sleep(1)
+    mock_reading = mock_pen_data[data_y, data_x]
+    reading_dict = {'robot_id': namespace.strip("/"), 'x': pose_x, 'y': pose_y, 'reading': mock_reading}
+    rospy.loginfo(namespace[1:-1] + " sampled " + str(reading_dict))
+    reading_msg = message_converter.convert_dictionary_to_ros_message('std_msgs/String',
+                                                                      {'data': str(reading_dict)})
+    mock_pen_reading_pub.publish(reading_msg)
+
+
 def queue_nav_goal_listener():
     rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
 
@@ -57,31 +88,36 @@ def queue_nav_goal_listener():
             goal_queue_pub.publish(str(goal_queue_hr))
 
             goal = goal_queue[0]
-            client.send_goal(goal)
+            if not use_simplified_nav:
+                client.send_goal(goal)
+
             rospy.loginfo("Executing goal: " + str(goal.target_pose.pose.position))
 
             rospy.loginfo("Sending navigation goal for sampling position...")
-            wait = client.wait_for_result()
-
-            if not wait:
-                rospy.logerr("Cannot reach navigation server!")
+            if not use_simplified_nav:
+                wait = client.wait_for_result()
             else:
-                state = client.get_state()
-                if state == 3:
-                    # If nav. was successful, stop for 5 seconds and read data indexed by position
-                    rospy.loginfo("Taking penetrometer reading...")
-                    pose_x = goal.target_pose.pose.position.x
-                    pose_y = goal.target_pose.pose.position.y
-                    data_x, data_y = math.floor(pose_x), math.floor(pose_y)
-                    rospy.sleep(5)
-                    mock_reading = mock_pen_data[data_y, data_x]
-                    reading_dict = {'robot_id': namespace.strip("/"), 'x': pose_x, 'y': pose_y, 'reading': mock_reading}
-                    rospy.loginfo(namespace[1:-1] + " sampled " + str(reading_dict))
-                    reading_msg = message_converter.convert_dictionary_to_ros_message('std_msgs/String',
-                                                                                      {'data': str(reading_dict)})
-                    mock_pen_reading_pub.publish(reading_msg)
+                time_to_goal = 1  # seconds
+                rospy.loginfo("Robot navigating for " + str(time_to_goal) + " seconds to goal...")
+                rospy.sleep(5)  # TODO: Calculate delay based on distance to goal and constant velocity
+
+                # TODO: Calculate this offset as half of the environment size, rather than hard-coding it
+                offset_goal = copy.deepcopy(goal)
+                offset_goal.target_pose.pose.position.x = offset_goal.target_pose.pose.position.x - 162.0
+                offset_goal.target_pose.pose.position.y = offset_goal.target_pose.pose.position.y - 110.0
+                cmd_pose_pub.publish(offset_goal.target_pose.pose)
+
+            if not use_simplified_nav:
+                if not wait:
+                    rospy.logerr("Cannot reach navigation server!")
                 else:
-                    rospy.logerr("Navigation goal failed!")
+                    state = client.get_state()
+                    if state == 3:
+                        pub_mock_pen_reading(goal)
+                    else:
+                        rospy.logerr("Navigation goal failed!")
+            else:
+                pub_mock_pen_reading(goal)
 
             goal_queue.pop(0)
 
