@@ -8,6 +8,7 @@ import copy
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String
 from geometry_msgs.msg import Pose
+from nav_msgs.msg import Odometry
 # TODO: Add rospy_message_converter to rosdep dependencies
 from rospy_message_converter import message_converter
 
@@ -32,8 +33,19 @@ if not use_simplified_nav:
     client.wait_for_server()
 
 goal_queue = []
+robot_speed = 0.4  # m/s
 goal_queue_pub = rospy.Publisher(namespace+node_name+"/goal_queue", String, queue_size=1)
 cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
+global current_pose
+
+
+def stage_ground_truth_pose_cb(odom_msg):
+    global current_pose
+    current_pose = odom_msg.pose.pose
+
+
+stage_ground_truth_pose_sub = rospy.Subscriber(namespace+'base_pose_ground_truth', Odometry,
+                                               stage_ground_truth_pose_cb)
 
 
 def queue_nav_goal_callback(data):
@@ -97,9 +109,18 @@ def queue_nav_goal_listener():
             if not use_simplified_nav:
                 wait = client.wait_for_result()
             else:
-                time_to_goal = 1  # seconds
+                # Calculate time to goal
+                current_pose_x = current_pose.position.x
+                current_pose_y = current_pose.position.y
+
+                goal_pose_x = goal.target_pose.pose.position.x
+                goal_pose_y = goal.target_pose.pose.position.y
+
+                distance_to_goal = math.sqrt((goal_pose_x - current_pose_x) ** 2 + (goal_pose_y - current_pose_y) ** 2)
+
+                time_to_goal = distance_to_goal * robot_speed  # Calculate time to travel to the goal in seconds
                 rospy.loginfo("Robot navigating for " + str(time_to_goal) + " seconds to goal...")
-                rospy.sleep(5)  # TODO: Calculate delay based on distance to goal and constant velocity
+                rospy.sleep(time_to_goal)
 
                 # TODO: Calculate this offset as half of the environment size, rather than hard-coding it
                 offset_goal = copy.deepcopy(goal)
