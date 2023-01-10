@@ -21,19 +21,16 @@ package_path = rospack.get_path('stage_soil_mapping_mrs')
 node_name = 'sampling_task_queue'
 rospy.init_node(node_name)
 namespace = rospy.get_namespace()
-robot_name = namespace.strip("/")
 print(namespace)
 
 # Simplified navigation - teleports the robots to the goal positions after a delay calculated from the distance to the
 # goal and a constant velocity, this may be used to enable faster simulation, as move_base bottlenecked sim performance.
 # use_simplified_nav = rospy.get_param(namespace+node_name+'/use_simplified_nav')
-use_simplified_nav = False  # Simply set as `True` for now to debug. TODO: implement this as a ROS param, as above
+use_simplified_nav = True  # Simply set as `True` for now to debug. TODO: implement this as a ROS param, as above
 
 if not use_simplified_nav:
     client = actionlib.SimpleActionClient(namespace+'move_base', MoveBaseAction)
-    rospy.loginfo(robot_name + " waiting for move_base actionserver...")
     client.wait_for_server()
-    rospy.loginfo(robot_name + " connected to move_base actionserver!")
 
 goal_queue = []
 robot_speed = 0.4  # m/s
