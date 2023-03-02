@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+__author__ = "Laurence Roberts-Elliott"
+import math
+import rospy
+import json
+import numpy as np
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from std_msgs.msg import Float32, String, Float32MultiArray
+
+# Define subscriber message callbacks
+def pose_callback(msg):
+        rospy.loginfo(msg)
+        return msg
+
+if __name__ == "__main__":
+    rospy.init_node("metric_publisher")
+    # Get robot namespaces
+    topics = rospy.get_published_topics()
+    robots = []
+    for topic in topics:
+        if topic[0].startswith("/robot_"):
+            robots.append(topic[0].split("/")[1])
+
+    robots = list(set(robots))
+    # Sort robots by number
+    robots.sort(key=lambda x: int(x.split("_")[1]))
+
+    rospy.loginfo("Found robots: %s", robots)
+
+    # Define publishers and metrics
+    publishers = {}
+    metrics = {}
+    publish_rate = 0.5 # Hz
+
+    for robot in robots:
+        publishers[robot] = {}
+        metrics[robot] = {}
+        
+        # Total distance travelled
+        publishers[robot]["total_distance_pub"] = rospy.Publisher(
+            "/{}/metrics/total_distance".format(robot), Float32, queue_size=1
+        )
+        rospy.loginfo("Created publisher for /{}/metrics/total_distance".format(robot))
+        metrics[robot]["positions"] = []  # List of 2D positions tuple (x, y)
+        metrics[robot]["total_distance"] = 0
+
+        # Total idle time
+        publishers[robot]["total_idle_time_pub"] = rospy.Publisher(
+            "/{}/metrics/total_idle_time".format(robot), Float32, queue_size=1
+        )
+        rospy.loginfo("Created publisher for /{}/metrics/total_idle_time".format(robot))
+        metrics[robot]["total_idle_time"] = 0
+
+        # Mean task completion time
+        publishers[robot]["mean_task_completion_time_pub"] = rospy.Publisher(
+            "/{}/metrics/mean_task_completion_time".format(robot), Float32, queue_size=1
+        )
+        rospy.loginfo("Created publisher for /{}/metrics/mean_task_completion_time".format(robot))
+        metrics[robot]["mean_task_completion_time"] = 0
+
+    task_completion_time = 0
+    while not rospy.is_shutdown():
+        # Calculate metrics
+        for robot in robots:
+            loop_start_time = rospy.get_time()
+            # Total distance travelled
+            pose = rospy.wait_for_message("/{}/amcl_pose".format(robot), PoseWithCovarianceStamped)
+            metrics[robot]["positions"].append((pose.pose.pose.position.x, pose.pose.pose.position.y))
+            if len(metrics[robot]["positions"]) > 1:
+                metrics[robot]["total_distance"] += math.sqrt(
+                    (metrics[robot]["positions"][-1][0] - metrics[robot]["positions"][-2][0]) ** 2
+                    + (metrics[robot]["positions"][-1][1] - metrics[robot]["positions"][-2][1]) ** 2
+                )
+
+            # Publish total distance travelled
+            publishers[robot]["total_distance_pub"].publish(metrics[robot]["total_distance"])
+
+            # Total idle time
+            goal_queue = rospy.wait_for_message("/{}/sampling_task_queue/goal_queue".format(robot), String)
+            goal_queue = json.loads(goal_queue.data)
+
+            if len(goal_queue) == 0:
+                current_time = rospy.get_time()
+                for robot_id in robots:
+                    metrics[robot_id]["total_idle_time"] += current_time - loop_start_time
+            else:
+                # Mean task completion time
+                task_completion_times = rospy.wait_for_message("/{}/sampling_task_queue/task_completion_times".format(robot), Float32MultiArray).data
+                if len(task_completion_times) > 0:
+                    metrics[robot]["mean_task_completion_time"] = float(np.mean(task_completion_times))
+                else:
+                    metrics[robot]["mean_task_completion_time"] = 0
+
+            # Publish task completion times
+            publishers[robot]["mean_task_completion_time_pub"].publish(metrics[robot]["mean_task_completion_time"])
+
+            # Publish total idle time
+            publishers[robot]["total_idle_time_pub"].publish(metrics[robot]["total_idle_time"])
+
+        rospy.sleep(1 / publish_rate)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 __author__ = "Laurence Roberts-Elliott"
 
 import numpy as np
@@ -18,6 +18,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 # TODO:
+# - Add GitHub ROS package dependencies as Git submodules
 # - Create script to record rosbag and generate summary statistics of metrics
 # - Visualise sampling points in RViz
 # - Implement additional metrics calculated in Mesa simulation
@@ -71,6 +72,7 @@ class Coordinator:
         rospy.loginfo("Coordinator node initialised")
         self.rr_rob_index = 0
         self.tasks = [(point.x, point.y) for point in points]
+
         # Define metrics
         self.RMSE = -1
         self.RMSEpub = rospy.Publisher(namespace + node_name + "/" + "RMSE", Float64, queue_size=0, tcp_nodelay=True, latch=True)
@@ -82,6 +84,7 @@ class Coordinator:
         self.kriging_variance = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
         self.interpolated_map_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
         self.kriging_variance_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+
         # Publish placeholder maps before any data is received
         interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
         kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
@@ -159,7 +162,7 @@ class Coordinator:
             elif id_arr[i] == "robot_1":
                 c_arr.append('g')
 
-        rospy.loginfo("c_arr len: " + str(len(c_arr)))
+        # rospy.loginfo("c_arr len: " + str(len(c_arr)))
 
         # Need at least 3 points to interpolate
         if len(x_arr) > 2:
@@ -275,13 +278,6 @@ class Coordinator:
     #         current_robot_idle_times.append(idle_times[-1])
 
     #     return np.sum(current_robot_idle_times)
-
-    # def getTotalWaitingTime(self):
-    #     current_robot_waiting_times = []
-    #     for waiting_times in self.robot_waiting_times.values():
-    #         current_robot_waiting_times.append(waiting_times[-1])
-
-    #     return np.sum(current_robot_waiting_times)
 
     # def getMaxVisits(self):
     #     return np.max(self.combined_cells_visited)
