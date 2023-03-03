@@ -7,3 +7,9 @@
 [submodule "topics_rviz_plugin"]
 	path = topics_rviz_plugin
 	url = https://gitlab.com/InstitutMaupertuis/topics_rviz_plugin.git
+[submodule "Multi-Robot-Soil-Mapping-in-Stage-Ros"]
+	path = Multi-Robot-Soil-Mapping-in-Stage-Ros
+	url = https://github.com/laurencejbelliott/Multi-Robot-Soil-Mapping-in-Stage-Ros.git
+[submodule "move_base_abstract"]
+	path = move_base_abstract
+	url = https://github.com/laurencejbelliott/move_base_abstract.git
