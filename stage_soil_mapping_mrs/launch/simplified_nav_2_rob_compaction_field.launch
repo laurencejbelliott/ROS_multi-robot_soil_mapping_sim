@@ -6,6 +6,7 @@
 
   <node pkg="stage_ros_add_pose_and_crash" type="stageros" name="stageros" args="$(find stage_soil_mapping_mrs)/stage_config/worlds/Compaction_Field_Fixed.world" respawn="false">
     <param name="base_watchdog_timeout" value="0.2"/>
+    <param name="is_clock_published" value="false"/>
   </node>
 
   <!-- BEGIN ROBOT 0 -->

@@ -7,6 +7,3 @@
 [submodule "topics_rviz_plugin"]
 	path = topics_rviz_plugin
 	url = https://gitlab.com/InstitutMaupertuis/topics_rviz_plugin.git
-[submodule "stage_ros"]
-	path = stage_ros
-	url = https://github.com/laurencejbelliott/stage_ros.git
