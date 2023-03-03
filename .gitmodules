@@ -1,9 +1,6 @@
 [submodule "cbpae"]
 	path = cbpae
 	url = https://github.com/gpdas/cbpae.git
-[submodule "Thorvald-Spatial-Sampling-Sim"]
-	path = Thorvald-Spatial-Sampling-Sim
-	url = https://github.com/laurencejbelliott/Thorvald-Spatial-Sampling-Sim.git
 [submodule "topics_rviz_plugin"]
 	path = topics_rviz_plugin
 	url = https://gitlab.com/InstitutMaupertuis/topics_rviz_plugin.git
