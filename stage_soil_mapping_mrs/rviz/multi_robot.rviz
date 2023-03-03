@@ -1,0 +1,562 @@
+Panels:
+  - Class: rviz/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /TF1
+        - /PoseWithCovariance1
+        - /PoseWithCovariance2
+        - /Map2
+      Splitter Ratio: 0.49889135360717773
+    Tree Height: 363
+  - Class: rviz/Selection
+    Name: Selection
+  - Class: rviz/Tool Properties
+    Expanded:
+      - /2D Pose Estimate1
+      - /2D Nav Goal1
+    Name: Tool Properties
+    Splitter Ratio: 0.5886790156364441
+  - Class: rviz/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+  - Class: rviz/Time
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+  - Class: topics_rviz_plugin/DisplayTopics
+    Name: DisplayTopics
+    horizontal_table_header: 000000ff000000000000000100000001000000020000000000000000000000000000000000000001ab000000020001010000000000000000000000000064ffffffff000000840000000000000002000001470000000100000000000000640000000100000000000003e80000000000
+    short_topic_names: false
+    topic_0_name: /coordinator/RMSE
+    topic_0_refresh_rate: 0
+    topic_0_type: std_msgs/Float64
+    topic_1_name: /coordinator/avgVar
+    topic_1_refresh_rate: 0
+    topic_1_type: std_msgs/Float64
+    topic_2_name: /coordinator/numSamples
+    topic_2_refresh_rate: 0
+    topic_2_type: std_msgs/Int64
+    topic_3_name: /robot_0/metrics/mean_task_completion_time
+    topic_3_refresh_rate: 0
+    topic_3_type: std_msgs/Float32
+    topic_4_name: /robot_0/metrics/total_distance
+    topic_4_refresh_rate: 0
+    topic_4_type: std_msgs/Float32
+    topic_5_name: /robot_0/metrics/total_idle_time
+    topic_5_refresh_rate: 0
+    topic_5_type: std_msgs/Float32
+    topic_6_name: /robot_1/metrics/mean_task_completion_time
+    topic_6_refresh_rate: 0
+    topic_6_type: std_msgs/Float32
+    topic_7_name: /robot_1/metrics/total_distance
+    topic_7_refresh_rate: 0
+    topic_7_type: std_msgs/Float32
+    topic_8_name: /robot_1/metrics/total_idle_time
+    topic_8_refresh_rate: 0
+    topic_8_type: std_msgs/Float32
+    vertical_table_header: 000000ff0000000000000002000000010000000900000000000000000000000000000000000000010e00000009000101000000000000000000000000001effffffff0000008100000000000000090000001e00000001000000000000001e00000001000000000000001e00000001000000000000001e00000001000000000000001e00000001000000000000001e00000001000000000000001e00000001000000000000001e00000001000000000000001e0000000100000000000003e80000000000
+Preferences:
+  PromptSaveOnExit: true
+Toolbars:
+  toolButtonStyle: 2
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.800000011920929
+      Class: rviz/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic: /map
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
+    - Class: rviz/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+        map:
+          Value: true
+        robot_0/base_footprint:
+          Value: true
+        robot_0/base_laser_link:
+          Value: true
+        robot_0/base_link:
+          Value: true
+        robot_0/odom:
+          Value: true
+        robot_1/base_footprint:
+          Value: true
+        robot_1/base_laser_link:
+          Value: true
+        robot_1/base_link:
+          Value: true
+        robot_1/odom:
+          Value: true
+      Marker Alpha: 1
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        map:
+          robot_0/odom:
+            robot_0/base_footprint:
+              robot_0/base_link:
+                robot_0/base_laser_link:
+                  {}
+          robot_1/odom:
+            robot_1/base_footprint:
+              robot_1/base_link:
+                robot_1/base_laser_link:
+                  {}
+      Update Interval: 0
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 255; 149; 0
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.029999999329447746
+      Name: "Robot 0: Global Plan"
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Queue Size: 10
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic: /robot_0/move_base_node/GlobalPlanner/plan
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 0; 0; 255
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.029999999329447746
+      Name: "Robot 0: Local Plan"
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Queue Size: 10
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic: /robot_0/move_base_node/DWAPlannerROS/local_plan
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 0; 0; 255
+      Enabled: false
+      Name: "Robot 0: Inflated Obstacles"
+      Queue Size: 10
+      Topic: /robot_0/move_base_node/local_costmap/inflated_obstacles
+      Unreliable: false
+      Value: false
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 255; 0; 0
+      Enabled: false
+      Name: "Robot 0: Obstacles"
+      Queue Size: 10
+      Topic: /robot_0/move_base_node/local_costmap/obstacles
+      Unreliable: false
+      Value: false
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 0; 255; 0
+      Enabled: false
+      Name: "Robot 0: Unknown Space"
+      Queue Size: 10
+      Topic: /robot_0/move_base_node/local_costmap/unknown_space
+      Unreliable: false
+      Value: false
+    - Alpha: 0.5
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: false
+      Name: "Robot 0: Global Costmap"
+      Topic: /robot_0/move_base_node/global_costmap/costmap
+      Unreliable: false
+      Use Timestamp: false
+      Value: false
+    - Alpha: 0.699999988079071
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: false
+      Name: "Robot 0: Local Costmap"
+      Topic: /robot_0/move_base_node/local_costmap/costmap
+      Unreliable: false
+      Use Timestamp: false
+      Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/LaserScan
+      Color: 252; 233; 79
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: "Robot 0: LaserScan"
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.10000000149011612
+      Style: Flat Squares
+      Topic: /robot_0/base_scan
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 0; 0; 255
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.029999999329447746
+      Name: "Robot 1: Local Plan"
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Queue Size: 10
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic: /robot_1/move_base_node/DWAPlannerROS/local_plan
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 255; 149; 0
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.029999999329447746
+      Name: "Robot 1: Global Plan"
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Queue Size: 10
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic: /robot_1/move_base_node/GlobalPlanner/plan
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 0; 0; 255
+      Enabled: false
+      Name: "Robot 1: Inflated Obstacles"
+      Queue Size: 10
+      Topic: /robot_1/move_base_node/local_costmap/inflated_obstacles
+      Unreliable: false
+      Value: false
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 255; 0; 0
+      Enabled: false
+      Name: "Robot 1: Obstacles"
+      Queue Size: 10
+      Topic: /robot_1/move_base_node/local_costmap/obstacles
+      Unreliable: false
+      Value: false
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 0; 255; 0
+      Enabled: false
+      Name: "Robot 1: Unknown Space"
+      Queue Size: 10
+      Topic: /robot_1/move_base_node/local_costmap/unknown_space
+      Unreliable: false
+      Value: false
+    - Alpha: 0.699999988079071
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: "Robot 1: Global Costmap"
+      Topic: /robot_1/move_base_node/global_costmap/costmap
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
+    - Alpha: 0.699999988079071
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: "Robot 1: Local Costmap"
+      Topic: /robot_1/move_base_node/local_costmap/costmap
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/LaserScan
+      Color: 252; 233; 79
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: "Robot 1: LaserScan"
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.10000000149011612
+      Style: Flat Squares
+      Topic: /robot_1/base_scan
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Class: rviz/Polygon
+      Color: 255; 0; 0
+      Enabled: true
+      Name: "Robot 0: Robot Footprint"
+      Queue Size: 10
+      Topic: /robot_0/move_base_node/global_costmap/footprint
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Polygon
+      Color: 170; 0; 255
+      Enabled: true
+      Name: "Robot 1: Robot Footprint"
+      Queue Size: 10
+      Topic: /robot_1/move_base_node/global_costmap/footprint
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Polygon
+      Color: 170; 0; 255
+      Enabled: true
+      Name: "Robot 2: Robot Footprint"
+      Queue Size: 10
+      Topic: /robot_2/move_base_node/global_costmap/footprint
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Polygon
+      Color: 170; 0; 255
+      Enabled: true
+      Name: "Robot 3: Robot Footprint"
+      Queue Size: 10
+      Topic: /robot_3/move_base_node/global_costmap/footprint
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Polygon
+      Color: 170; 0; 255
+      Enabled: true
+      Name: "Robot 4: Robot Footprint"
+      Queue Size: 10
+      Topic: /robot_4/move_base_node/global_costmap/footprint
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Polygon
+      Color: 170; 0; 255
+      Enabled: true
+      Name: "Robot 5: Robot Footprint"
+      Queue Size: 10
+      Topic: /robot_5/move_base_node/global_costmap/footprint
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/PoseWithCovariance
+      Color: 255; 25; 0
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: PoseWithCovariance
+      Queue Size: 10
+      Shaft Length: 1
+      Shaft Radius: 2
+      Shape: Arrow
+      Topic: /robot_0/amcl_pose
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/PoseWithCovariance
+      Color: 255; 25; 0
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: PoseWithCovariance
+      Queue Size: 10
+      Shaft Length: 1
+      Shaft Radius: 2
+      Shape: Arrow
+      Topic: /robot_1/amcl_pose
+      Unreliable: false
+      Value: true
+    - Alpha: 0.699999988079071
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic: /coordinator/interpolated_map
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Default Light: true
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+      Hide Inactive Objects: true
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+    - Class: rviz/SetInitialPose
+      Theta std deviation: 0.2617993950843811
+      Topic: /robot_1/initialpose
+      X std deviation: 0.5
+      Y std deviation: 0.5
+    - Class: rviz/SetGoal
+      Topic: move_base_simple/goal
+    - Class: rviz/PublishPoint
+      Single click: true
+      Topic: /clicked_point
+  Value: true
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 280.78656005859375
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Field of View: 0.7853981852531433
+      Focal Point:
+        X: 167.874755859375
+        Y: 113.41859436035156
+        Z: 1.963409423828125
+      Focal Shape Fixed Size: false
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 1.5697963237762451
+      Target Frame: <Fixed Frame>
+      Yaw: 4.711399078369141
+    Saved: ~
+Window Geometry:
+  DisplayTopics:
+    collapsed: false
+  Displays:
+    collapsed: true
+  Height: 1016
+  Hide Left Dock: true
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd000000040000000000000376000002c5fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb0000001e0054006f006f006c002000500072006f00700065007200740069006500730000000116000000770000005c00fffffffb000000100044006900730070006c006100790073000000019300000248000000c900fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f000002aefc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a005600690065007700730000000028000002ae000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b20000000000000000000000020000039c0000017efc0100000002fb0000001a0044006900730070006c006100790054006f007000690063007301000000000000039c0000009000fffffffb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004fc0000003efc0100000002fb0000000800540069006d00650000000000000004fc0000041800fffffffb0000000800540069006d006501000000000000045000000000000000000000039c0000021a00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Time:
+    collapsed: false
+  Tool Properties:
+    collapsed: true
+  Views:
+    collapsed: false
+  Width: 924
+  X: 72
+  Y: 27
