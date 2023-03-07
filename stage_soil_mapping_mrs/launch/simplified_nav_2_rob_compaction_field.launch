@@ -53,6 +53,11 @@
   </node>
 
   <node pkg="stage_soil_mapping_mrs" type="metric_publisher" name="metric_publisher" respawn="false" output="screen" />
+  <!-- TODO: Add launch file argument for sampling duration, and integrate in coordinator and rosbag record-->
   <node pkg="stage_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen" />
   <node pkg="stage_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
+
+<node pkg="rosbag" type="record" name="rosbag_record"
+args='rosbag record -e "(.*)metrics(.*)|(.*)coordinator(.*)" --duration 2h -O $(find stage_soil_mapping_mrs)/bags/metrics.bag'
+respawn="false" output="screen" />
 </launch>
