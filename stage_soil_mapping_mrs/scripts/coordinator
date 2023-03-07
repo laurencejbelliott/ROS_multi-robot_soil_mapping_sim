@@ -73,7 +73,7 @@ class Coordinator:
         self.rr_rob_index = 0
         self.tasks = [(point.x, point.y) for point in points]
         self.start_time = rospy.Time.now().to_sec()
-        self.sampling_time_budget = 30 # 2 hours (120 seconds * 60 for minutes)
+        self.sampling_time_budget = 60 * 120 # 2 hours (60 seconds * 120 for 120 minutes in seconds)
 
         # Define metrics
         self.RMSE = -1
@@ -298,8 +298,6 @@ if __name__ == '__main__':
     # Check if sampling time budget has elapsed
     while not rospy.is_shutdown():
         now = rospy.Time.now().to_sec()
-        rospy.loginfo("Sampling time budget: %s seconds" % (coordinator.sampling_time_budget))
-        rospy.loginfo("Time elapsed: %s seconds" % (now - coordinator.start_time))
         if now - coordinator.start_time > coordinator.sampling_time_budget:
             rospy.loginfo("Sampling time budget elapsed (%s seconds)" % coordinator.sampling_time_budget)
             sampling_time_budget_elapsed_pub.publish(True)
