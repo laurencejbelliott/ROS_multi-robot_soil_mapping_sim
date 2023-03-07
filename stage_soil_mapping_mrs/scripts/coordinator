@@ -10,7 +10,7 @@ import copy
 import cv2
 from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
-from std_msgs.msg import String, Float64, Int64
+from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
 from move_base_msgs.msg import MoveBaseGoal
 from shapely.geometry import MultiPoint
@@ -72,6 +72,8 @@ class Coordinator:
         rospy.loginfo("Coordinator node initialised")
         self.rr_rob_index = 0
         self.tasks = [(point.x, point.y) for point in points]
+        self.start_time = rospy.Time.now().to_sec()
+        self.sampling_time_budget = 30 # 2 hours (120 seconds * 60 for minutes)
 
         # Define metrics
         self.RMSE = -1
@@ -265,42 +267,11 @@ class Coordinator:
     def metricPubNumSamples(self): # Publish Number of Samples
         self.numSamplespub.publish(self.numSamples)
 
-    # def getTotalDistance(self):
-    #     current_robot_distances = []
-    #     for distances in self.robot_travel_distances.values():
-    #         current_robot_distances.append(distances[-1])
-
-    #     return np.sum(current_robot_distances)
-
-    # def getTotalIdleTime(self):
-    #     current_robot_idle_times = []
-    #     for idle_times in self.robot_idle_times.values():
-    #         current_robot_idle_times.append(idle_times[-1])
-
-    #     return np.sum(current_robot_idle_times)
-
-    # def getMaxVisits(self):
-    #     return np.max(self.combined_cells_visited)
-
-    # def getTotalTaskCompletionTime(self):
-    #     task_completion_times = []
-    #     for agent in self.schedule.agents:
-    #         if agent.type == 0:
-    #             task_completion_times.append(np.sum(agent.task_completion_times))
-
-    #     return np.sum(task_completion_times)
-
-    # def getAvgTaskCompletionTime(self):
-    #     task_completion_times = []
-    #     for agent in self.schedule.agents:
-    #         if agent.type == 0:
-    #             task_completion_times.append(np.mean(agent.task_completion_times))
-
-    #     return np.mean(task_completion_times)
-
 
 if __name__ == '__main__':
     coordinator = Coordinator()
+
+    sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
 
     # Get list of topics where robots publish their sampled values
     topics = rospy.get_published_topics()
@@ -323,4 +294,15 @@ if __name__ == '__main__':
     plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
 
     coordinator.publish_ta(task_allocations)
-    rospy.spin()
+
+    # Check if sampling time budget has elapsed
+    while not rospy.is_shutdown():
+        now = rospy.Time.now().to_sec()
+        rospy.loginfo("Sampling time budget: %s seconds" % (coordinator.sampling_time_budget))
+        rospy.loginfo("Time elapsed: %s seconds" % (now - coordinator.start_time))
+        if now - coordinator.start_time > coordinator.sampling_time_budget:
+            rospy.loginfo("Sampling time budget elapsed (%s seconds)" % coordinator.sampling_time_budget)
+            sampling_time_budget_elapsed_pub.publish(True)
+            rospy.signal_shutdown("Sampling time budget elapsed")
+            break
+        rospy.sleep(0.1)
