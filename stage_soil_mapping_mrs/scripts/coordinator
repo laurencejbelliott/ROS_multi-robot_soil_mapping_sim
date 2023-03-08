@@ -80,7 +80,9 @@ class Coordinator:
         self.RMSEpub = rospy.Publisher(namespace + node_name + "/" + "RMSE", Float64, queue_size=0, tcp_nodelay=True, latch=True)
         self.avgVar = -1
         self.avgVarpub = rospy.Publisher(namespace + node_name + "/" + "avgVar", Float64, queue_size=0, tcp_nodelay=True, latch=True)
-        
+
+        self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
+
         # Initialise kriging maps
         self.interpolated_map = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
         self.kriging_variance = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
@@ -271,7 +273,7 @@ class Coordinator:
 if __name__ == '__main__':
     coordinator = Coordinator()
 
-    sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
+    
 
     # Get list of topics where robots publish their sampled values
     topics = rospy.get_published_topics()
@@ -300,7 +302,7 @@ if __name__ == '__main__':
         now = rospy.Time.now().to_sec()
         if now - coordinator.start_time > coordinator.sampling_time_budget:
             rospy.loginfo("Sampling time budget elapsed (%s seconds)" % coordinator.sampling_time_budget)
-            sampling_time_budget_elapsed_pub.publish(True)
+            coordinator.sampling_time_budget_elapsed_pub.publish(True)
             rospy.signal_shutdown("Sampling time budget elapsed")
             break
         rospy.sleep(0.1)
