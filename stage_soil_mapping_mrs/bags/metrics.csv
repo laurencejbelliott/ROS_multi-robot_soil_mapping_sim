@@ -1,0 +1,9 @@
+Metric,Robot Name,Value
+Total distance travelled (m),robot_0,3384.827392578125
+Total idle time (s),robot_0,3.015210628509521
+Mean task completion time (s),robot_0,216.1266021728516
+Total distance travelled (m),robot_1,3334.230224609375
+Total idle time (s),robot_1,3.015210628509521
+Mean task completion time (s),robot_1,217.1793365478516
+Kriging RMSE (Root Mean Squared Error),NA,1.6532068658231898
+Mean kriging variance,NA,3.513498975561433
