@@ -18,12 +18,14 @@ import matplotlib
 matplotlib.use('Agg')
 
 # TODO:
-# - Add GitHub ROS package dependencies as Git submodules
-# - Create script to record rosbag and generate summary statistics of metrics
+# Set sim speed to 1x while interpolating, as this can take a moment and create a lag
+# - Alternate algorithms for robot intitial positions
+#  * Realistic, within a maximum distance from a gate where robots can enter the field
+#  * Random with a maximum distance from the edge of the map
+#  * Random with a maximum distance from the edge of the map, and a maximum distance from another robot
 # - Visualise sampling points in RViz
-# - Implement additional metrics calculated in Mesa simulation
 # - Port dynamic sampling from Mesa simulation
-# - Integrate a more sophisticated task allocation algorithm
+# - Integrate one or two more sophisticated task allocation algorithm
 
 rospack = rospkg.RosPack()
 package_path = rospack.get_path('stage_soil_mapping_mrs')
@@ -33,6 +35,7 @@ with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolate
 node_name = 'coordinator'
 namespace = rospy.get_namespace()
 
+increased_sim_speed = 1000.0 # 1000x faster than real time
 
 # Define parameters (Explanations are in kriging.py)
 # Use Gaussian variogram model
@@ -59,7 +62,7 @@ points = MultiPoint(np.transpose([np.tile(sample_grid_x, len(sample_grid_y)), np
 # print("Points: {}".format(points))
 plt.imshow(ground_truth, origin="lower")
 plt.colorbar()
-plt.plot([point.x for point in points], [point.y for point in points], 'bo')
+plt.plot([point.x for point in points.geoms], [point.y for point in points.geoms], 'bo')
 plt.title("Ground truth with sampling grid")
 plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png')
 rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path +
@@ -71,9 +74,14 @@ class Coordinator:
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         self.rr_rob_index = 0
-        self.tasks = [(point.x, point.y) for point in points]
+        self.tasks = [(point.x, point.y) for point in points.geoms]
         self.start_time = rospy.Time.now().to_sec()
         self.sampling_time_budget = 60 * 120 # 2 hours (60 seconds * 120 for 120 minutes in seconds)
+
+        self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
+        self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
+        # self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, queue_size=0, tcp_nodelay=True, latch=True)
+        self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
 
         # Define metrics
         self.RMSE = -1
@@ -102,6 +110,10 @@ class Coordinator:
         self.robots = ["robot_0", "robot_1"]
         rospy.loginfo("Robots: " + str(self.robots))
 
+    
+    def sim_time_factor_callback(self, msg):
+        self.sim_time_factor = msg.data
+    
     def rr_ta(self):  # Round Robin Task Allocation
         ta = {"robot_0": [], "robot_1": []}
         print("Robots are: " + str(self.robots))
@@ -170,6 +182,11 @@ class Coordinator:
 
         # Need at least 3 points to interpolate
         if len(x_arr) > 2:
+            print("Setting sim. speed to 1x while interpolating...")
+
+            # Set sim speed to 1x
+            self.sim_time_factor_pub.publish(1.0)
+
             # Run interpolation of sampled points
             rospy.loginfo("Interpolating, please wait...")
             m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
@@ -228,6 +245,8 @@ class Coordinator:
             # rospy.loginfo("Saved interpolation plot to " + package_path+"/include/stage_soil_mapping_mrs/variance.png")
 
             rospy.loginfo("Interpolation complete")
+            print("Setting sim. speed back to " + str(increased_sim_speed) + "x...")
+            self.sim_time_factor_pub.publish(increased_sim_speed)
         else:
             rospy.loginfo("Need at least 3 points to interpolate, we have " + str(len(x_arr)))
 
@@ -296,6 +315,9 @@ if __name__ == '__main__':
     plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
 
     coordinator.publish_ta(task_allocations)
+
+    # Speed up simulation
+    coordinator.sim_time_factor_pub.publish(increased_sim_speed)
 
     # Check if sampling time budget has elapsed
     while not rospy.is_shutdown():
