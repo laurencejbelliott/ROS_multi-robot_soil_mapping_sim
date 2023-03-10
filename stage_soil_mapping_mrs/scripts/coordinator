@@ -18,7 +18,6 @@ import matplotlib
 matplotlib.use('Agg')
 
 # TODO:
-# Set sim speed to 1x while interpolating, as this can take a moment and create a lag
 # - Alternate algorithms for robot intitial positions
 #  * Realistic, within a maximum distance from a gate where robots can enter the field
 #  * Random with a maximum distance from the edge of the map
