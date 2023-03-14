@@ -7,8 +7,8 @@ import rospy
 import rospkg
 import json
 import random
-import copy
 import cv2
+from math import sqrt
 from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
@@ -44,7 +44,7 @@ namespace = rospy.get_namespace()
 increased_sim_speed = 500 # 500x faster than real time
 env_width = 324 # metres
 env_height = 220 # metres
-robot_init_pose_algorithm = 'realistic' # 'realistic', 'random edge', 'random edge and robot'
+robot_init_pose_algorithm = 'random edge and robot' # 'realistic', 'random edge', 'random edge and robot'
 
 # Define parameters (Explanations are in kriging.py)
 # Use Gaussian variogram model
@@ -242,6 +242,34 @@ class Coordinator:
         occupancy_grid.data = numpy_array.flatten().tolist()
         return occupancy_grid
     
+    def random_edge_pose(self):
+        # Choose random pose within 5m of the edge of the environment
+        pose = Pose()
+        
+        # Choose random edge
+        edge = random.randint(0, 3)
+        
+        if edge == 0: # North
+            pose.position.x = random.uniform(1, env_width-1)
+            pose.position.y = random.uniform(env_height-6, env_height-1)
+        elif edge == 1: # East
+            pose.position.x = random.uniform(env_width-6, env_width-1)
+            pose.position.y = random.uniform(1, env_height-1)
+        elif edge == 2: # South
+            pose.position.x = random.uniform(1, env_width-1)
+            pose.position.y = random.uniform(1, 6)
+        elif edge == 3: # West
+            pose.position.x = random.uniform(1, 6)
+            pose.position.y = random.uniform(1, env_height-1)
+        
+        # Convert position from stage coordinates to ROS coordinates
+        pose.position.x = pose.position.x - env_width/2
+        pose.position.y = pose.position.y - env_height/2
+
+        pose.orientation.w = 1
+
+        return pose
+    
     def new_sample_callback(self, data):
         self.numSamples += 1
         self.metricPubNumSamples()
@@ -286,6 +314,7 @@ if __name__ == '__main__':
 
     # Set initial robot poses according to the chosen alogrithm
     if robot_init_pose_algorithm == "realistic": # Set robot poses within 5m of the field's gate (Northwestern corner)
+        rospy.loginfo("Setting robot poses using 'realistic' algorithm")
         for robot in coordinator.robots:
             pose = Pose()
             pose.position.x = random.uniform(1, 5)
@@ -299,8 +328,40 @@ if __name__ == '__main__':
             coordinator.robot_pose_pubs[robot].publish(pose)
             rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
     elif robot_init_pose_algorithm == "random edge":
-        pass # TODO    
-    
+        rospy.loginfo("Setting robot poses using 'random edge' algorithm")
+        for robot in coordinator.robots:
+            # Random edge
+            # 0 = North, 1 = East, 2 = South, 3 = West
+            edge = random.randint(0, 3)
+
+            # Choose random pose within 5m of the edge
+            pose = coordinator.random_edge_pose()
+            coordinator.robot_pose_pubs[robot].publish(pose)
+            rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+    elif robot_init_pose_algorithm == "random edge and robot":
+        rospy.loginfo("Setting robot poses using 'random edge and robot' algorithm")
+        first_robot_pose = Pose()
+        first_robot = True
+
+        for robot in coordinator.robots:
+            if first_robot:
+                pose = coordinator.random_edge_pose()
+                coordinator.robot_pose_pubs[robot].publish(pose)
+                rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+                first_robot_pose = pose
+                first_robot = False
+            else:
+                # Choose random pose within 5m of the edge and the first robot
+                pose = coordinator.random_edge_pose()
+                distance = sqrt((pose.position.x - first_robot_pose.position.x)**2 + (pose.position.y - first_robot_pose.position.y)**2)
+                while distance > 5:
+                    pose = coordinator.random_edge_pose()
+                    distance = sqrt((pose.position.x - first_robot_pose.position.x)**2 + (pose.position.y - first_robot_pose.position.y)**2)
+
+                coordinator.robot_pose_pubs[robot].publish(pose)
+                rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+                
+
     coordinator.publish_ta(task_allocations)
 
     # Speed up simulation
