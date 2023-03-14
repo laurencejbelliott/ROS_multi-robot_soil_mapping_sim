@@ -6,25 +6,32 @@ import pickle
 import rospy
 import rospkg
 import json
+import random
 import copy
 import cv2
 from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
+from geometry_msgs.msg import Pose
 from move_base_msgs.msg import MoveBaseGoal
 from shapely.geometry import MultiPoint
 import matplotlib
 matplotlib.use('Agg')
 
+# Set random seed for reproducibility
+random.seed(0)
+
 # TODO:
 # - Alternate algorithms for robot intitial positions
-#  * Realistic, within a maximum distance from a gate where robots can enter the field
-#  * Random with a maximum distance from the edge of the map
-#  * Random with a maximum distance from the edge of the map, and a maximum distance from another robot
+#  * Realistic, within a maximum distance from a gate where robots can enter the field - 'realstic'
+#  * Random with a maximum distance from the edge of the map - 'random edge'
+#  * Random with a maximum distance from the edge of the map, and a maximum distance from another robot - 'random edge and robot'
+# - Visualise kriging variance in RViz
 # - Visualise sampling points in RViz
 # - Port dynamic sampling from Mesa simulation
 # - Integrate one or two more sophisticated task allocation algorithm
+# - Dynamic sampling improvements (co-kriging, quadtree environment partitioning, etc.)
 
 rospack = rospkg.RosPack()
 package_path = rospack.get_path('stage_soil_mapping_mrs')
@@ -34,7 +41,10 @@ with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolate
 node_name = 'coordinator'
 namespace = rospy.get_namespace()
 
-increased_sim_speed = 1000.0 # 1000x faster than real time
+increased_sim_speed = 500 # 500x faster than real time
+env_width = 324 # metres
+env_height = 220 # metres
+robot_init_pose_algorithm = 'realistic' # 'realistic', 'random edge', 'random edge and robot'
 
 # Define parameters (Explanations are in kriging.py)
 # Use Gaussian variogram model
@@ -107,6 +117,10 @@ class Coordinator:
 
         # Set of robots
         self.robots = ["robot_0", "robot_1"]
+        self.robot_pose_pubs = {}
+        for robot in self.robots:
+            self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
+
         rospy.loginfo("Robots: " + str(self.robots))
 
     
@@ -201,48 +215,6 @@ class Coordinator:
             self.RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
             self.avgVar = np.mean(v)
 
-            # # Plot interpolated map
-            # plt.close()
-
-            # # Fix mismatched array lengths
-            # c_arr_fixed = []
-            # if len(c_arr) < len(x_arr):
-            #     c_arr_fixed = copy.copy(c_arr)
-            #     if c_arr[-1] == 'r':
-            #         c_arr_fixed.append('g')
-            #     elif c_arr[-1] == 'g':
-            #         c_arr_fixed.append('r')
-            #     plt.scatter(x_arr, y_arr, c=c_arr_fixed)
-            # else:    
-            #     plt.scatter(x_arr, y_arr, c=c_arr)
-            # plt.imshow(m, origin="lower")
-            # plt.title("Interpolation of " + str(len(x_arr)) + " samples")
-            # plt.colorbar()
-            # plt.savefig(package_path+'/include/stage_soil_mapping_mrs/interpolated.png')
-            # rospy.loginfo("Saved interpolation plot to " + package_path+"/include/stage_soil_mapping_mrs/interpolated.png")
-            # plt.show(block=False)
-            # plt.pause(1)
-
-            # # Plot variance map
-            # plt.close()
-
-            # # Fix mismatched array lengths
-            # c_arr_fixed = []
-            # if len(c_arr) < len(x_arr):
-            #     c_arr_fixed = copy.copy(c_arr)
-            #     if c_arr[-1] == 'r':
-            #         c_arr_fixed.append('g')
-            #     elif c_arr[-1] == 'g':
-            #         c_arr_fixed.append('r')
-            #     plt.scatter(x_arr, y_arr, c=c_arr_fixed)
-            # else:    
-            #     plt.scatter(x_arr, y_arr, c=c_arr)
-            # plt.imshow(v, origin="lower")
-            # plt.title("Kriging variance from " + str(len(x_arr)) + " samples")
-            # plt.colorbar()
-            # plt.savefig(package_path+'/include/stage_soil_mapping_mrs/variance.png')
-            # rospy.loginfo("Saved interpolation plot to " + package_path+"/include/stage_soil_mapping_mrs/variance.png")
-
             rospy.loginfo("Interpolation complete")
             print("Setting sim. speed back to " + str(increased_sim_speed) + "x...")
             self.sim_time_factor_pub.publish(increased_sim_speed)
@@ -291,8 +263,6 @@ class Coordinator:
 if __name__ == '__main__':
     coordinator = Coordinator()
 
-    
-
     # Get list of topics where robots publish their sampled values
     topics = rospy.get_published_topics()
     pen_reading_topics = [topic[0] for topic in topics if 'mock_pen_reading' in topic[0]]
@@ -300,7 +270,8 @@ if __name__ == '__main__':
 
     for topic in pen_reading_topics:
         rospy.Subscriber(topic, String, coordinator.new_sample_callback)
-
+        
+    
     # Get Round Robin task allocations
     task_allocations = coordinator.rr_ta()
     rospy.loginfo("Round robin task allocations: " + str(task_allocations))
@@ -313,6 +284,23 @@ if __name__ == '__main__':
             plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
     plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
 
+    # Set initial robot poses according to the chosen alogrithm
+    if robot_init_pose_algorithm == "realistic": # Set robot poses within 5m of the field's gate (Northwestern corner)
+        for robot in coordinator.robots:
+            pose = Pose()
+            pose.position.x = random.uniform(1, 5)
+            pose.position.y = random.uniform(env_height-6, env_height-1)
+
+            # Convert position from stage coordinates to ROS coordinates
+            pose.position.x = pose.position.x - env_width/2
+            pose.position.y = pose.position.y - env_height/2
+
+            pose.orientation.w = 1
+            coordinator.robot_pose_pubs[robot].publish(pose)
+            rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+    elif robot_init_pose_algorithm == "random edge":
+        pass # TODO    
+    
     coordinator.publish_ta(task_allocations)
 
     # Speed up simulation
