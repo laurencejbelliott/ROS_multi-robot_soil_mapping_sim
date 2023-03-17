@@ -36,9 +36,11 @@ if not use_simplified_nav:
     rospy.loginfo(robot_name + " connected to move_base actionserver!")
 
 goal_queue = []
+sample_positions = []
 robot_speed = 0.4  # m/s
 task_completion_times = []
 goal_queue_pub = rospy.Publisher(namespace+node_name+"/goal_queue", String, queue_size=1)
+sample_positions_pub = rospy.Publisher(namespace+node_name+"/sample_positions", String, queue_size=1)
 cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
 task_completion_times_pub = rospy.Publisher(namespace+node_name+"/task_completion_times", Float32MultiArray, queue_size=1, latch=True)
 global current_pose

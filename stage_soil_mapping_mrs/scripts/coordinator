@@ -7,6 +7,7 @@ import rospy
 import rospkg
 import json
 import random
+import sys
 import cv2
 from math import sqrt
 from matplotlib import pyplot as plt
@@ -23,11 +24,7 @@ matplotlib.use('Agg')
 random.seed(0)
 
 # TODO:
-# - Alternate algorithms for robot intitial positions
-#  * Realistic, within a maximum distance from a gate where robots can enter the field - 'realstic'
-#  * Random with a maximum distance from the edge of the map - 'random edge'
-#  * Random with a maximum distance from the edge of the map, and a maximum distance from another robot - 'random edge and robot'
-# - Visualise kriging variance in RViz
+# - Expose args through launch file, and create script to automate launching multiple trials
 # - Visualise sampling points in RViz
 # - Port dynamic sampling from Mesa simulation
 # - Integrate one or two more sophisticated task allocation algorithm
@@ -60,6 +57,8 @@ y_arr = []
 o_arr = []
 id_arr = []
 
+
+
 # Create grid of points to sample
 # 20 points spread evenly across the x axis, with a 5% margin on each of the edges
 sample_grid_x = np.linspace(min(x_grid) + max(x_grid) * 0.05, max(x_grid) - max(x_grid) * 0.05, 10)
@@ -79,11 +78,25 @@ rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path +
 
 
 class Coordinator:
-    def __init__(self):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
-        self.rr_rob_index = 0
-        self.tasks = [(point.x, point.y) for point in points.geoms]
+        
+        self.trial_num = trial_num
+        self.num_robots = num_robots
+        self.ta_algo = ta_algo
+        self.sampling_algo = sampling_algo
+        self.env_crop_factor = env_crop_factor
+
+        rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
+            self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
+
+        if str(self.ta_algo).lower() == 'round robin':
+            self.rr_rob_index = 0
+
+        if 'grid' in str(self.sampling_algo).lower():
+            self.tasks = [(point.x, point.y) for point in points.geoms]
+        
         self.start_time = rospy.Time.now().to_sec()
         self.sampling_time_budget = 60 * 120 # 2 hours (60 seconds * 120 for 120 minutes in seconds)
 
@@ -116,7 +129,7 @@ class Coordinator:
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
 
         # Set of robots
-        self.robots = ["robot_0", "robot_1"]
+        self.robots = ["robot_" + str(r) for r in range(self.num_robots)]
         self.robot_pose_pubs = {}
         for robot in self.robots:
             self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
@@ -128,7 +141,9 @@ class Coordinator:
         self.sim_time_factor = msg.data
     
     def rr_ta(self):  # Round Robin Task Allocation
-        ta = {"robot_0": [], "robot_1": []}
+        ta = {}
+        for robot in self.robots:
+            ta[robot] = []
         print("Robots are: " + str(self.robots))
         for task in self.tasks:
             print("Robot ID for current allocation is " + str(self.rr_rob_index))
@@ -289,28 +304,45 @@ class Coordinator:
 
 
 if __name__ == '__main__':
-    coordinator = Coordinator()
+    myargv = rospy.myargv(argv=sys.argv)
+
+    if len(myargv) > 0:
+        trial_num = int(myargv[1])
+        num_robots = int(myargv[2])
+        ta_algo = myargv[3]
+        sampling_algo = myargv[4]
+        env_crop_factor = int(myargv[5])
+
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor)
+    else:
+        rospy.logerr("No args provided")
+        sys.exit(1)
+
+
 
     # Get list of topics where robots publish their sampled values
     topics = rospy.get_published_topics()
     pen_reading_topics = [topic[0] for topic in topics if 'mock_pen_reading' in topic[0]]
     rospy.loginfo("Subscribing to simulated penetrometer reading topics: " + str(pen_reading_topics))
+    if len(pen_reading_topics) == 0:
+        rospy.logerr("No topics found for simulated penetrometer readings, is the simulation running?")
+        sys.exit(1)
 
     for topic in pen_reading_topics:
         rospy.Subscriber(topic, String, coordinator.new_sample_callback)
         
-    
-    # Get Round Robin task allocations
-    task_allocations = coordinator.rr_ta()
-    rospy.loginfo("Round robin task allocations: " + str(task_allocations))
-    plt.close()
-    plt.imshow(ground_truth, origin="lower")
-    for robot in coordinator.robots:
-        if robot == "robot_0":
-            plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'ro')
-        elif robot == "robot_1":
-            plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
-    plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
+    if "robin" in str(coordinator.ta_algo).lower():
+        # Get Round Robin task allocations
+        task_allocations = coordinator.rr_ta()
+        rospy.loginfo("Round robin task allocations: " + str(task_allocations))
+        plt.close()
+        plt.imshow(ground_truth, origin="lower")
+        for robot in coordinator.robots:
+            if robot == "robot_0":
+                plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'ro')
+            elif robot == "robot_1":
+                plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
+        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
 
     # Set initial robot poses according to the chosen alogrithm
     if robot_init_pose_algorithm == "realistic": # Set robot poses within 5m of the field's gate (Northwestern corner)
