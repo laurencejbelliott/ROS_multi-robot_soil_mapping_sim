@@ -10,14 +10,18 @@ package_path = rospack.get_path('stage_soil_mapping_mrs')
 
 print(package_path)
 
-num_robots = 10
+trial_num = 5
+num_robots = 3
+ta_algo = "round robin"
+sampling_algo = "grid"
+env_crop_factor = 2
 
 cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
-            'trial_num:=1',
+            'trial_num:='+str(trial_num),
             'num_robots:='+str(num_robots),
-            'ta_algo:="round robin"',
-            'sampling_algo:="grid"',
-            'env_crop_factor:=1',
+            'ta_algo:="'+str(ta_algo)+'"',
+            'sampling_algo:="'+str(sampling_algo)+'"',
+            'env_crop_factor:='+str(env_crop_factor)
             ]
 roslaunch_args = cli_args[1:]
 roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]

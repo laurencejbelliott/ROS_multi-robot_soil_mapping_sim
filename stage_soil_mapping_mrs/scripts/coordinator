@@ -83,10 +83,24 @@ class Coordinator:
         rospy.loginfo("Coordinator node initialised")
         
         self.trial_num = trial_num
+        random.seed(self.trial_num)
         self.num_robots = num_robots
         self.ta_algo = ta_algo
         self.sampling_algo = sampling_algo
         self.env_crop_factor = env_crop_factor
+
+        self.env_full_width = env_width
+        self.env_full_height = env_height
+
+        self.env_cropped_width = env_width / self.env_crop_factor
+        self.env_cropped_height = env_height / self.env_crop_factor
+
+        if self.env_crop_factor > 1:
+            self.env_origin_x = (self.env_cropped_width / 2) * -1
+            self.env_origin_y = (self.env_cropped_width / 2) * -1
+        else:
+            self.env_origin_x = 0
+            self.env_origin_y = 0
 
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
             self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
@@ -263,23 +277,24 @@ class Coordinator:
         
         # Choose random edge
         edge = random.randint(0, 3)
-        
+
+        # Using cropped environment dimensions
         if edge == 0: # North
-            pose.position.x = random.uniform(1, env_width-1)
-            pose.position.y = random.uniform(env_height-6, env_height-1)
+            pose.position.x = random.uniform(1, self.env_cropped_width-1)
+            pose.position.y = random.uniform(self.env_cropped_height-6, self.env_cropped_height-1)
         elif edge == 1: # East
-            pose.position.x = random.uniform(env_width-6, env_width-1)
-            pose.position.y = random.uniform(1, env_height-1)
+            pose.position.x = random.uniform(self.env_cropped_width-6, self.env_cropped_width-1)
+            pose.position.y = random.uniform(1, self.env_cropped_height-1)
         elif edge == 2: # South
-            pose.position.x = random.uniform(1, env_width-1)
+            pose.position.x = random.uniform(1, self.env_cropped_width-1)
             pose.position.y = random.uniform(1, 6)
         elif edge == 3: # West
             pose.position.x = random.uniform(1, 6)
-            pose.position.y = random.uniform(1, env_height-1)
+            pose.position.y = random.uniform(1, self.env_cropped_height-1)
         
         # Convert position from stage coordinates to ROS coordinates
-        pose.position.x = pose.position.x - env_width/2
-        pose.position.y = pose.position.y - env_height/2
+        pose.position.x = pose.position.x - coordinator.env_cropped_width/2
+        pose.position.y = pose.position.y - coordinator.env_cropped_height/2
 
         pose.orientation.w = 1
 
@@ -386,7 +401,12 @@ if __name__ == '__main__':
                 # Choose random pose within 5m of the edge and the first robot
                 pose = coordinator.random_edge_pose()
                 distance = sqrt((pose.position.x - first_robot_pose.position.x)**2 + (pose.position.y - first_robot_pose.position.y)**2)
-                while distance > 5:
+                # Keep choosing random poses until the distance is greater than 5m and within the bounds of the environment
+                # Print environment bounds for debugging
+                rospy.loginfo("Environment bounds: x = [" + str(coordinator.env_origin_x) + ", " + str(coordinator.env_cropped_width) + "], y = [" + str(coordinator.env_origin_y) + ", " + str(coordinator.env_cropped_height) + "]")
+
+                while distance > 5 or pose.position.x < coordinator.env_origin_x or pose.position.x > coordinator.env_cropped_width or pose.position.y < coordinator.env_origin_y or \
+                    pose.position.y > coordinator.env_cropped_height:
                     pose = coordinator.random_edge_pose()
                     distance = sqrt((pose.position.x - first_robot_pose.position.x)**2 + (pose.position.y - first_robot_pose.position.y)**2)
 

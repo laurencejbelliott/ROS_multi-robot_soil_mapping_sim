@@ -42,8 +42,7 @@ floorplan
 (
   name "blank"
   bitmap "Compaction_Field.png"
-  size [324.0 220.0 2.0]
-  pose [0.0 0.000 0.000 0.000]
+  size [81.0 55.0 2.0]
 
 )
 

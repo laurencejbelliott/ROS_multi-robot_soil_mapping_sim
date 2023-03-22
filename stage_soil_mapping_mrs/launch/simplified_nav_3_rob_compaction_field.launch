@@ -4,7 +4,7 @@
   <param name="/use_sim_time" value="true"/>
   <node name="map_server" pkg="map_server" type="map_server" args="$(find stage_soil_mapping_mrs)/stage_config/maps/Compaction_Field.pgm 0.05" respawn="false" />
 
-  <node pkg="stage_ros_add_pose_and_crash" type="stageros" name="stageros" args="$(find stage_soil_mapping_mrs)/stage_config/worlds/3_Rob_Compaction.world" respawn="false">
+  <node pkg="stage_ros_add_pose_and_crash" type="stageros" name="stageros" args="$(find stage_soil_mapping_mrs)/stage_config/worlds/cropped/$(arg env_crop_factor)/3_Rob_Compaction.world" respawn="false">
     <param name="base_watchdog_timeout" value="0.2"/>
     <param name="is_clock_published" value="false"/>
   </node>
@@ -74,7 +74,7 @@
   <node pkg="stage_soil_mapping_mrs" type="metric_publisher" name="metric_publisher" respawn="false" output="screen" />
 
   <node pkg="stage_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen"
-  args='$(arg trial_num) 3 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor)'/>
+  args='$(arg trial_num) $(arg num_robots) $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor)'/>
   
   <node pkg="stage_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
 
