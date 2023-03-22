@@ -24,7 +24,7 @@ matplotlib.use('Agg')
 random.seed(0)
 
 # TODO:
-# - Expose args through launch file, and create script to automate launching multiple trials
+# - Update RMSE algo. to fix bug with cropped environment
 # - Visualise sampling points in RViz
 # - Port dynamic sampling from Mesa simulation
 # - Integrate one or two more sophisticated task allocation algorithm
@@ -71,6 +71,12 @@ class Coordinator:
 
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
             self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
+        
+        self.ground_truth = ground_truth
+
+        # Crop ground truth to match environment size
+        if self.env_crop_factor > 1:
+            self.ground_truth = self.ground_truth[0:int(self.env_cropped_height), 0:int(self.env_cropped_width)]
         
         # Define parameters (Explanations are in kriging.py)
         # Use Gaussian variogram model
@@ -247,7 +253,7 @@ class Coordinator:
             self.kriging_variance_pub.publish(kriging_variance_ros)
 
             # Calculate interpolation metrics
-            self.RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
+            self.RMSE = np.sqrt(np.mean((m - self.ground_truth) ** 2))
             self.avgVar = np.mean(v)
 
             rospy.loginfo("Interpolation complete")
