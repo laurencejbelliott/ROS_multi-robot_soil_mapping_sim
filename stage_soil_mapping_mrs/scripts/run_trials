@@ -11,10 +11,10 @@ package_path = rospack.get_path('stage_soil_mapping_mrs')
 print(package_path)
 
 trial_num = 1
-num_robots = 3
+num_robots = 5
 ta_algo = "round robin"
 sampling_algo = "grid"
-env_crop_factor = 1
+env_crop_factor = 2
 
 cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
             'trial_num:='+str(trial_num),
