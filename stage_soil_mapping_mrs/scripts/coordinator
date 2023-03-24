@@ -38,7 +38,7 @@ with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolate
 node_name = 'coordinator'
 namespace = rospy.get_namespace()
 
-increased_sim_speed = 500 # 500x faster than real time
+increased_sim_speed = 100 # 500x faster than real time
 env_width = 324 # metres
 env_height = 220 # metres
 robot_init_pose_algorithm = 'random edge and robot' # 'realistic', 'random edge', 'random edge and robot'
@@ -98,7 +98,7 @@ class Coordinator:
             self.tasks = [(point.x, point.y) for point in points.geoms]
         
         self.start_time = rospy.Time.now().to_sec()
-        self.sampling_time_budget = 60 * 120 # 2 hours (60 seconds * 120 for 120 minutes in seconds)
+        self.sampling_time_budget = 300 # seconds, as in Mesa sim trials
 
         self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
