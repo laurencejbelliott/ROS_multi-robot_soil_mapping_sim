@@ -81,6 +81,8 @@ class Coordinator:
 
         if 'grid' in str(self.sampling_algo).lower():
             self.tasks = self.grid_sampling()
+        elif 'random' in str(self.sampling_algo).lower():
+            self.tasks = self.random_sampling()
         
         self.start_time = rospy.Time.now().to_sec()
         self.sampling_time_budget = 300 # seconds, as in Mesa sim trials
@@ -125,6 +127,7 @@ class Coordinator:
     def sim_time_factor_callback(self, msg):
         self.sim_time_factor = msg.data
     
+
     def grid_sampling(self):
         # Create grid of points to sample
         # 20 points spread evenly across the x axis, with a 5% margin on each of the edges
@@ -134,7 +137,6 @@ class Coordinator:
         
         points = MultiPoint(np.transpose([np.tile(sample_grid_x, len(sample_grid_y)), np.repeat(sample_grid_y,
                                                                                            len(sample_grid_x))]))
-        # print("Points: {}".format(points))
         plt.imshow(ground_truth, origin="lower")
         plt.colorbar()
         # Plot X and Y of points.geoms tuples
@@ -145,13 +147,30 @@ class Coordinator:
         
         # Convert points.geoms into list of tuples and return
         return [(p.x, p.y) for p in points.geoms]
+    
+    def random_sampling(self):
+        # Create random points to sample
+        points = [(np.random.uniform(min(x_grid), max(x_grid)), np.random.uniform(min(y_grid),
+                    max(y_grid))) for _ in range(self.num_robots)]
+        plt.imshow(ground_truth, origin="lower")
+        plt.colorbar()
+        # Plot X and Y of tuples
+        plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
+        plt.title("Ground truth with initial random sampling")
+        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png')
+        rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/include/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png")
+
+        return points
+
+
 
     def rr_ta(self):  # Round Robin Task Allocation
         ta = {}
         for robot in self.robots:
             ta[robot] = []
         print("Robots are: " + str(self.robots))
-        for task in self.tasks:
+        for _ in range(len(self.tasks)):
+            task = self.tasks.pop(0)
             print("Robot ID for current allocation is " + str(self.rr_rob_index))
             ta["robot_" + str(self.rr_rob_index)].append(task)
             if self.rr_rob_index == len(self.robots) - 1:
@@ -200,20 +219,13 @@ class Coordinator:
         o_arr.append(float(data["reading"]))
         id_arr.append(data["robot_id"])
 
-        # rospy.loginfo("x_arr len: " + str(len(x_arr)))
-        # rospy.loginfo("y_arr len: " + str(len(y_arr)))
-        # rospy.loginfo("o_arr len: " + str(len(o_arr)))
-        # rospy.loginfo("id_arr len: " + str(len(id_arr)))
-
         c_arr = []
         for i in range(len(id_arr)):
             if id_arr[i] == "robot_0":
                 c_arr.append('r')
             elif id_arr[i] == "robot_1":
                 c_arr.append('g')
-
-        # rospy.loginfo("c_arr len: " + str(len(c_arr)))
-
+        
         # Need at least 3 points to interpolate
         if len(x_arr) > 2:
             print("Setting sim. speed to 1x while interpolating...")
@@ -237,11 +249,11 @@ class Coordinator:
             self.avgVar = np.mean(v)
 
             rospy.loginfo("Interpolation complete")
+            
             print("Setting sim. speed back to " + str(increased_sim_speed) + "x...")
             self.sim_time_factor_pub.publish(increased_sim_speed)
         else:
             rospy.loginfo("Need at least 3 points to interpolate, we have " + str(len(x_arr)))
-
 
     def numpy_array_to_occupancy_grid(self, numpy_array): # Convert numpy array to OccupancyGrid message
         # Upscale numpy array by 20x for better visualisation
@@ -297,6 +309,12 @@ class Coordinator:
         self.interpolate_and_visualise(data.data)
         self.metricPubRMSE()
         self.metricPubAvgVariance()
+
+        # Generate new sampling goals
+        if "grid" not in self.ta_algo:
+            if "random" in self.ta_algo:
+                self.tasks += self.random_sampling()
+            self.publish_ta(self.rr_ta())
 
     def metricPubRMSE(self): # Publish Root Mean Squared Error
         self.RMSEpub.publish(self.RMSE)
@@ -410,6 +428,9 @@ if __name__ == '__main__':
         now = rospy.Time.now().to_sec()
         if now - coordinator.start_time > coordinator.sampling_time_budget:
             rospy.loginfo("Sampling time budget elapsed (%s seconds)" % coordinator.sampling_time_budget)
+
+            # Set simulation time factor back to 1
+            coordinator.sim_time_factor_pub.publish(1)
             coordinator.sampling_time_budget_elapsed_pub.publish(True)
             rospy.signal_shutdown("Sampling time budget elapsed")
             break

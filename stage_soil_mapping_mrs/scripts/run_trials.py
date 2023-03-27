@@ -10,10 +10,10 @@ package_path = rospack.get_path('stage_soil_mapping_mrs')
 
 print(package_path)
 
-trial_num = 1
+trial_num = 2
 num_robots = 10
 ta_algo = "round robin"
-sampling_algo = "grid"
+sampling_algo = "random"
 env_crop_factor = 1 # Environment cropping is not yet implemented
 
 cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
