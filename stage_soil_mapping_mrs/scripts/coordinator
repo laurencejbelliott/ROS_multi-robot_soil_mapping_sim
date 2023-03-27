@@ -24,9 +24,13 @@ matplotlib.use('Agg')
 random.seed(0)
 
 # TODO:
-# - Expose args through launch file, and create script to automate launching multiple trials
+# - Implement remaining features from Mesa simulation:
+#  * Random sampling
+#  * Sequential Single Item task allocation
+#  * Bespoke dynamic sampling (as in Mesa simulation)
+# - Extend run_trials script to automate launching multiple trials
+# - Environment cropping
 # - Visualise sampling points in RViz
-# - Port dynamic sampling from Mesa simulation
 # - Integrate one or two more sophisticated task allocation algorithm
 # - Dynamic sampling improvements (co-kriging, quadtree environment partitioning, etc.)
 
@@ -38,7 +42,7 @@ with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolate
 node_name = 'coordinator'
 namespace = rospy.get_namespace()
 
-increased_sim_speed = 100 # 500x faster than real time
+increased_sim_speed = 100 # 100x faster than real time
 env_width = 324 # metres
 env_height = 220 # metres
 robot_init_pose_algorithm = 'random edge and robot' # 'realistic', 'random edge', 'random edge and robot'
@@ -56,25 +60,6 @@ x_arr = []
 y_arr = []
 o_arr = []
 id_arr = []
-
-
-
-# Create grid of points to sample
-# 20 points spread evenly across the x axis, with a 5% margin on each of the edges
-sample_grid_x = np.linspace(min(x_grid) + max(x_grid) * 0.05, max(x_grid) - max(x_grid) * 0.05, 10)
-# 20 points spread evenly across the y axis, with a 5% margin on each of the edges
-sample_grid_y = np.linspace(min(y_grid) + max(y_grid) * 0.05, max(y_grid) - max(y_grid) * 0.05, 10)
-
-points = MultiPoint(np.transpose([np.tile(sample_grid_x, len(sample_grid_y)), np.repeat(sample_grid_y,
-                                                                                        len(sample_grid_x))]))
-# print("Points: {}".format(points))
-plt.imshow(ground_truth, origin="lower")
-plt.colorbar()
-plt.plot([point.x for point in points.geoms], [point.y for point in points.geoms], 'bo')
-plt.title("Ground truth with sampling grid")
-plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png')
-rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path +
-              "/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png")
 
 
 class Coordinator:
@@ -95,7 +80,7 @@ class Coordinator:
             self.rr_rob_index = 0
 
         if 'grid' in str(self.sampling_algo).lower():
-            self.tasks = [(point.x, point.y) for point in points.geoms]
+            self.tasks = self.grid_sampling()
         
         self.start_time = rospy.Time.now().to_sec()
         self.sampling_time_budget = 300 # seconds, as in Mesa sim trials
@@ -140,6 +125,27 @@ class Coordinator:
     def sim_time_factor_callback(self, msg):
         self.sim_time_factor = msg.data
     
+    def grid_sampling(self):
+        # Create grid of points to sample
+        # 20 points spread evenly across the x axis, with a 5% margin on each of the edges
+        sample_grid_x = np.linspace(min(x_grid) + max(x_grid) * 0.05, max(x_grid) - max(x_grid) * 0.05, 10)
+        # 20 points spread evenly across the y axis, with a 5% margin on each of the edges
+        sample_grid_y = np.linspace(min(y_grid) + max(y_grid) * 0.05, max(y_grid) - max(y_grid) * 0.05, 10)
+        
+        points = MultiPoint(np.transpose([np.tile(sample_grid_x, len(sample_grid_y)), np.repeat(sample_grid_y,
+                                                                                           len(sample_grid_x))]))
+        # print("Points: {}".format(points))
+        plt.imshow(ground_truth, origin="lower")
+        plt.colorbar()
+        # Plot X and Y of points.geoms tuples
+        plt.plot([p.x for p in points.geoms], [p.y for p in points.geoms], 'ro')
+        plt.title("Ground truth with sampling grid")
+        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png')
+        rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png")
+        
+        # Convert points.geoms into list of tuples and return
+        return [(p.x, p.y) for p in points.geoms]
+
     def rr_ta(self):  # Round Robin Task Allocation
         ta = {}
         for robot in self.robots:

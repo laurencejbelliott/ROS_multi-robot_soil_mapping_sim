@@ -10,7 +10,7 @@ from rospkg import RosPack
 if __name__ == '__main__':
     # Get the path to the bag file
     rp = RosPack()
-    bag_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/rr_gs_metrics.bag'
+    bag_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/metrics.bag'
     bag_folder_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/'
 
     # Read the bag file
@@ -57,30 +57,36 @@ if __name__ == '__main__':
         print("Last step mean task completion time: " + str(mean_task_completion_time_df.iloc[-1].data))
 
     # Get global mean of per-robot metrics
-    total_distance_mean = 0
-    total_idle_time_mean = 0
-    global_mean_task_completion_time = 0
+    global_total_distance = 0
+    global_total_idle_time = 0
+    global_total_task_completion_time = 0
 
     for name in robot_names:
         # Get last step robot total_distance
         total_distance_msg = b.message_by_topic('/' + name + '/metrics/total_distance')
         total_distance_df = pd.read_csv(total_distance_msg)
-        total_distance_mean += total_distance_df.iloc[-1].data
+        global_total_distance += total_distance_df.iloc[-1].data
 
         # Get last step robot total_idle_time
         total_idle_time_msg = b.message_by_topic('/' + name + '/metrics/total_idle_time')
         total_idle_time_df = pd.read_csv(total_idle_time_msg)
-        total_idle_time_mean += total_idle_time_df.iloc[-1].data
+
+        # Ignore value if 0 or NaN
+        if total_idle_time_df.iloc[-1].data != 0 or not np.isnan(total_idle_time_df.iloc[-1].data):
+            global_total_idle_time += total_idle_time_df.iloc[-1].data
 
         # Get last step robot mean_task_completion_time
         mean_task_completion_time_msg = b.message_by_topic('/' + name + '/metrics/mean_task_completion_time')
         mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
-        global_mean_task_completion_time += mean_task_completion_time_df.iloc[-1].data
+
+        # Ignore value if 0 or NaN
+        if mean_task_completion_time_df.iloc[-1].data != 0 or not np.isnan(mean_task_completion_time_df.iloc[-1].data):
+            global_total_task_completion_time += mean_task_completion_time_df.iloc[-1].data
 
 print("Global mean of per-robot metrics:")
-print("Last step total distance: " + str(total_distance_mean / len(robot_names)))
-print("Last step total idle time: " + str(total_idle_time_mean / len(robot_names)))
-print("Last step mean of task completion time: " + str(global_mean_task_completion_time / len(robot_names)))
+print("Last step total distance: " + str(global_total_distance / len(robot_names)))
+print("Last step mean idle time: " + str(global_total_idle_time / len(robot_names)))
+print("Last step mean of task completion time: " + str(global_total_task_completion_time / len(robot_names)))
 
 
 # Put last step metrics in a DataFrame
