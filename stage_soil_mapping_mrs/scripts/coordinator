@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal
 from shapely.geometry import MultiPoint
 import matplotlib
@@ -73,6 +73,8 @@ class Coordinator:
         self.sampling_algo = sampling_algo
         self.env_crop_factor = env_crop_factor
 
+        self.robot_speed = 2.0 # m/s
+
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
             self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
 
@@ -85,7 +87,7 @@ class Coordinator:
             self.tasks = self.random_sampling()
         
         self.start_time = rospy.Time.now().to_sec()
-        self.sampling_time_budget = 300 # seconds, as in Mesa sim trials
+        self.sampling_time_budget = 60 * 120 # seconds, as in Mesa sim trials
 
         self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
@@ -163,6 +165,11 @@ class Coordinator:
         return points
 
 
+    def calculate_path_cost(self, robot_position, task_position):
+        # Calculate path cost
+        # Euclidean distance between robot and task, multiplied by constant robot_speed
+        return np.sqrt((robot_position[0] - task_position[0]) ** 2 + (robot_position[1] - task_position[1]) ** 2) * self.robot_speed
+
 
     def rr_ta(self):  # Round Robin Task Allocation
         ta = {}
@@ -177,6 +184,30 @@ class Coordinator:
                 self.rr_rob_index = 0
             else:
                 self.rr_rob_index += 1
+        return ta
+    
+
+    def ssi_ta(self):
+        # Sequential Single-Item Task Allocation
+        ta = {}
+        for robot in self.robots:
+            ta[robot] = []
+        print("Robots are: " + str(self.robots))
+        for _ in range(len(self.tasks)):
+            task = self.tasks.pop(0)
+            bids = []
+            for robot in self.robots:
+                # Get robot position
+                robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
+                robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
+
+                # Calculate path cost for robot to navigate to task
+                bid = self.calculate_path_cost(robot_position, task)
+                bids.append(bid)
+            
+            # Get index of max bid
+            max_bid_index = bids.index(max(bids))
+            ta["robot_" + str(max_bid_index)].append(task)
         return ta
 
 
@@ -314,7 +345,11 @@ class Coordinator:
         if "grid" not in self.ta_algo:
             if "random" in self.ta_algo:
                 self.tasks += self.random_sampling()
-            self.publish_ta(self.rr_ta())
+            
+            if "round robin" or "rr" in str(self.ta_algo).lower():
+                self.publish_ta(self.rr_ta())
+            elif "SSI" in str(self.ta_algo).upper():
+                self.publish_ta(self.ssi_ta())
 
     def metricPubRMSE(self): # Publish Root Mean Squared Error
         self.RMSEpub.publish(self.RMSE)
@@ -367,6 +402,9 @@ if __name__ == '__main__':
             elif robot == "robot_1":
                 plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
         plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
+    elif "SSI" in str(coordinator.ta_algo).upper():
+        task_allocations = coordinator.ssi_ta()
+        rospy.loginfo("Round robin task allocations: " + str(task_allocations))
 
     # Set initial robot poses according to the chosen alogrithm
     if robot_init_pose_algorithm == "realistic": # Set robot poses within 5m of the field's gate (Northwestern corner)
