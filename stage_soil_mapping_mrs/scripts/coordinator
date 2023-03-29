@@ -171,13 +171,14 @@ class Coordinator:
 
 
     def rr_ta(self):  # Round Robin Task Allocation
+        rospy.loginfo("Executing Round Robin Task Allocation...")
         ta = {}
         for robot in self.robots:
             ta[robot] = []
         print("Robots are: " + str(self.robots))
         for _ in range(len(self.tasks)):
             task = self.tasks.pop(0)
-            print("Robot ID for current allocation is " + str(self.rr_rob_index))
+            # print("Robot ID for current allocation is " + str(self.rr_rob_index))
             ta["robot_" + str(self.rr_rob_index)].append(task)
             if self.rr_rob_index == len(self.robots) - 1:
                 self.rr_rob_index = 0
@@ -186,8 +187,8 @@ class Coordinator:
         return ta
     
 
-    def ssi_ta(self):
-        # Sequential Single-Item Task Allocation
+    def ssi_ta(self): # Sequential Single-Item Task Allocation
+        rospy.loginfo("Executing Sequential Single-Item Task Allocation...")
         ta = {}
         for robot in self.robots:
             ta[robot] = []
@@ -352,9 +353,11 @@ class Coordinator:
             if "random" in self.sampling_algo:
                 self.tasks += self.random_sampling()
             
-            if "round" or "robin" or "rr" in str(self.ta_algo).lower():
+            if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
+                rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
                 self.publish_ta(self.rr_ta())
-            elif "SSI" in str(self.ta_algo).upper():
+            if "SSI" in str(self.ta_algo).upper():
+                rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
                 self.publish_ta(self.ssi_ta())
 
     def metricPubRMSE(self): # Publish Root Mean Squared Error
@@ -469,7 +472,7 @@ if __name__ == '__main__':
     sleep(10)            
     
     # Initial task allocation
-    if "round" or "robin" or "rr" in str(coordinator.ta_algo).lower():
+    if "round" in str(coordinator.ta_algo).lower() or "robin" in str(coordinator.ta_algo).lower() or "rr" in str(coordinator.ta_algo).lower():
         # Get Round Robin task allocations
         task_allocations = coordinator.rr_ta()
         rospy.loginfo("Round robin task allocations: " + str(task_allocations))
@@ -499,6 +502,7 @@ if __name__ == '__main__':
             # Set simulation time factor back to 1
             coordinator.sim_time_factor_pub.publish(1)
             coordinator.sampling_time_budget_elapsed_pub.publish(True)
+            sleep(5)
             rospy.signal_shutdown("Sampling time budget elapsed")
             break
         rospy.sleep(0.1)

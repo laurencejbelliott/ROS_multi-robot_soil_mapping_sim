@@ -82,6 +82,6 @@
   <node pkg="stage_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
 
 <node pkg="rosbag" type="record" name="rosbag_record"
-args='rosbag record -e "(.*)metrics(.*)|(.*)coordinator(.*)|(.*)amcl_pose(.*)|(.*)goal_queue(.*)|(.*)mock_pen_reading(.*)" --duration 300s -O $(find stage_soil_mapping_mrs)/bags/metrics.bag'
+args='rosbag record -e "(.*)metrics(.*)|(.*)coordinator(.*)|(.*)amcl_pose(.*)|(.*)goal_queue(.*)|(.*)mock_pen_reading(.*)" --duration 240s -O $(find stage_soil_mapping_mrs)/bags/metrics.bag'
 respawn="false" output="screen" />
 </launch>
