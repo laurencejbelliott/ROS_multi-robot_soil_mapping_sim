@@ -22,7 +22,7 @@ cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compact
             'ta_algo:="'+ta_algo+'"',
             'sampling_algo:="'+sampling_algo+'"',
             'env_crop_factor:=1',
-            'bag_name:="'+str(num_robots)+'_robs_'+str(ta_algo)+'_'+str(sampling_algo)+'_'+str(trial_num)+'"'
+            'bag_name:="metrics"'
             ]
 roslaunch_args = cli_args[1:]
 roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]
