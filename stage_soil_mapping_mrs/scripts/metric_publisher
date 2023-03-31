@@ -5,7 +5,7 @@ import rospy
 import json
 import numpy as np
 from geometry_msgs.msg import PoseWithCovarianceStamped
-from std_msgs.msg import Float32, String, Float32MultiArray
+from std_msgs.msg import Float32, String, Float32MultiArray, Bool
 
 # Define subscriber message callbacks
 def pose_callback(msg):
@@ -31,6 +31,10 @@ if __name__ == "__main__":
     publishers = {}
     metrics = {}
     publish_rate = 0.5 # Hz
+
+    # Wait for sim_initialized topic to be published
+    rospy.wait_for_message("/sim_initialized", Bool)
+
 
     for robot in robots:
         publishers[robot] = {}

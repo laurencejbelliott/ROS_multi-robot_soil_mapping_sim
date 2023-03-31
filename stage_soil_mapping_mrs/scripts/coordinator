@@ -10,22 +10,19 @@ import random
 import sys
 import cv2
 from math import sqrt
+from time import sleep
 from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal
 from shapely.geometry import MultiPoint
 import matplotlib
 matplotlib.use('Agg')
 
-# Set random seed for reproducibility
-random.seed(0)
-
 # TODO:
 # - Implement remaining features from Mesa simulation:
-#  * Random sampling
 #  * Sequential Single Item task allocation
 #  * Bespoke dynamic sampling (as in Mesa simulation)
 # - Extend run_trials script to automate launching multiple trials
@@ -45,7 +42,7 @@ namespace = rospy.get_namespace()
 increased_sim_speed = 100 # 100x faster than real time
 env_width = 324 # metres
 env_height = 220 # metres
-robot_init_pose_algorithm = 'random edge and robot' # 'realistic', 'random edge', 'random edge and robot'
+robot_init_pose_algorithm = 'random' # 'realistic', 'random edge', 'random edge and robot'. Using 'random' to replicate Mesa trials. Future trials will use 'random edge and robot'
 
 # Define parameters (Explanations are in kriging.py)
 # Use Gaussian variogram model
@@ -68,37 +65,38 @@ class Coordinator:
         rospy.loginfo("Coordinator node initialised")
         
         self.trial_num = trial_num
+
+        # Set random seed for reproducibility
+        random.seed(trial_num)
+
         self.num_robots = num_robots
         self.ta_algo = ta_algo
         self.sampling_algo = sampling_algo
         self.env_crop_factor = env_crop_factor
 
+        self.robot_speed = 2.0 # m/s
+
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
             self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
 
-        if str(self.ta_algo).lower() == 'round robin':
+        if 'round' or 'robin' or 'rr' in str(self.ta_algo).lower():
             self.rr_rob_index = 0
 
         if 'grid' in str(self.sampling_algo).lower():
             self.tasks = self.grid_sampling()
         elif 'random' in str(self.sampling_algo).lower():
             self.tasks = self.random_sampling()
-        
-        self.start_time = rospy.Time.now().to_sec()
-        self.sampling_time_budget = 300 # seconds, as in Mesa sim trials
 
         self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
-        # self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, queue_size=0, tcp_nodelay=True, latch=True)
         self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
+        self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True)
 
         # Define metrics
         self.RMSE = -1
         self.RMSEpub = rospy.Publisher(namespace + node_name + "/" + "RMSE", Float64, queue_size=0, tcp_nodelay=True, latch=True)
         self.avgVar = -1
         self.avgVarpub = rospy.Publisher(namespace + node_name + "/" + "avgVar", Float64, queue_size=0, tcp_nodelay=True, latch=True)
-
-        self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
 
         # Initialise kriging maps
         self.interpolated_map = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
@@ -163,20 +161,63 @@ class Coordinator:
         return points
 
 
+    def calculate_path_cost(self, robot_position, task_position):
+        # Calculate path cost
+        # Euclidean distance between robot and task, multiplied by constant robot_speed
+        return np.sqrt((robot_position[0] - task_position[0]) ** 2 + (robot_position[1] - task_position[1]) ** 2) * self.robot_speed
+
 
     def rr_ta(self):  # Round Robin Task Allocation
+        rospy.loginfo("Executing Round Robin Task Allocation...")
         ta = {}
         for robot in self.robots:
             ta[robot] = []
         print("Robots are: " + str(self.robots))
         for _ in range(len(self.tasks)):
             task = self.tasks.pop(0)
-            print("Robot ID for current allocation is " + str(self.rr_rob_index))
+            # print("Robot ID for current allocation is " + str(self.rr_rob_index))
             ta["robot_" + str(self.rr_rob_index)].append(task)
             if self.rr_rob_index == len(self.robots) - 1:
                 self.rr_rob_index = 0
             else:
                 self.rr_rob_index += 1
+        return ta
+    
+
+    def ssi_ta(self): # Sequential Single-Item Task Allocation
+        rospy.loginfo("Executing Sequential Single-Item Task Allocation...")
+        ta = {}
+        for robot in self.robots:
+            ta[robot] = []
+        print("Robots are: " + str(self.robots))
+        for _ in range(len(self.tasks)):
+            task = self.tasks.pop(0)
+            bids = []
+            for robot in self.robots:
+                # Get robot position
+                robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
+                robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
+
+                # Calculate path cost for robot to navigate to task
+                bid = self.calculate_path_cost(robot_position, task)
+                bids.append(bid)
+            
+            rospy.loginfo("\nTask: " + str(task) + ". Bids:")
+            for b in range(len(bids)):
+                rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
+
+            # Get index of max bid
+            min_bid_index = bids.index(min(bids))
+
+            rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
+
+            ta["robot_" + str(min_bid_index)].append(task)
+
+        # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
+        for robot in self.robots:
+            sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+            ta[robot] = sorted_tasks
+
         return ta
 
 
@@ -311,10 +352,16 @@ class Coordinator:
         self.metricPubAvgVariance()
 
         # Generate new sampling goals
-        if "grid" not in self.ta_algo:
-            if "random" in self.ta_algo:
+        if "grid" not in self.sampling_algo:
+            if "random" in self.sampling_algo:
                 self.tasks += self.random_sampling()
-            self.publish_ta(self.rr_ta())
+            
+            if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
+                rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
+                self.publish_ta(self.rr_ta())
+            if "SSI" in str(self.ta_algo).upper():
+                rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
+                self.publish_ta(self.ssi_ta())
 
     def metricPubRMSE(self): # Publish Root Mean Squared Error
         self.RMSEpub.publish(self.RMSE)
@@ -354,19 +401,9 @@ if __name__ == '__main__':
 
     for topic in pen_reading_topics:
         rospy.Subscriber(topic, String, coordinator.new_sample_callback)
-        
-    if "robin" in str(coordinator.ta_algo).lower():
-        # Get Round Robin task allocations
-        task_allocations = coordinator.rr_ta()
-        rospy.loginfo("Round robin task allocations: " + str(task_allocations))
-        plt.close()
-        plt.imshow(ground_truth, origin="lower")
-        for robot in coordinator.robots:
-            if robot == "robot_0":
-                plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'ro')
-            elif robot == "robot_1":
-                plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
-        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
+
+    rospy.loginfo("Waiting for simulation to start before publishing initial poses")
+    sleep(5)
 
     # Set initial robot poses according to the chosen alogrithm
     if robot_init_pose_algorithm == "realistic": # Set robot poses within 5m of the field's gate (Northwestern corner)
@@ -416,22 +453,50 @@ if __name__ == '__main__':
 
                 coordinator.robot_pose_pubs[robot].publish(pose)
                 rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
-                
+    elif robot_init_pose_algorithm == "random":
+        rospy.loginfo("Setting robot poses using 'random' algorithm")
+        for robot in coordinator.robots:
+            pose = Pose()
+            pose.position.x = random.uniform(1, env_width-1)
+            pose.position.y = random.uniform(1, env_height-1)
+            pose.orientation.w = 1
 
+            # Convert position from stage coordinates to ROS coordinates
+            pose.position.x = pose.position.x - env_width/2
+            pose.position.y = pose.position.y - env_height/2
+
+            coordinator.robot_pose_pubs[robot].publish(pose)
+
+
+            
+
+    # Wait for robot initial poses to be registered in the simulation
+    rospy.loginfo("Waiting for robot initial poses to be registered in the simulation")
+    sleep(10)
+
+    # Publish to '/sim_initialized' topic
+    rospy.loginfo("Publishing to '/sim_initialized' topic")
+    coordinator.sim_initialized_pub.publish(True)
+    
+    # Initial task allocation
+    if "round" in str(coordinator.ta_algo).lower() or "robin" in str(coordinator.ta_algo).lower() or "rr" in str(coordinator.ta_algo).lower():
+        # Get Round Robin task allocations
+        task_allocations = coordinator.rr_ta()
+        rospy.loginfo("Round robin task allocations: " + str(task_allocations))
+        plt.close()
+        plt.imshow(ground_truth, origin="lower")
+        for robot in coordinator.robots:
+            if robot == "robot_0":
+                plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'ro')
+            elif robot == "robot_1":
+                plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
+        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
+    elif "SSI" in str(coordinator.ta_algo).upper():
+        task_allocations = coordinator.ssi_ta()
+        rospy.loginfo("SSI task allocations: " + str(task_allocations))
+    
     coordinator.publish_ta(task_allocations)
 
-    # Speed up simulation
+    # Speed up simulation and keep coordinator node running until ROS is shutdown
     coordinator.sim_time_factor_pub.publish(increased_sim_speed)
-
-    # Check if sampling time budget has elapsed
-    while not rospy.is_shutdown():
-        now = rospy.Time.now().to_sec()
-        if now - coordinator.start_time > coordinator.sampling_time_budget:
-            rospy.loginfo("Sampling time budget elapsed (%s seconds)" % coordinator.sampling_time_budget)
-
-            # Set simulation time factor back to 1
-            coordinator.sim_time_factor_pub.publish(1)
-            coordinator.sampling_time_budget_elapsed_pub.publish(True)
-            rospy.signal_shutdown("Sampling time budget elapsed")
-            break
-        rospy.sleep(0.1)
+    rospy.spin()

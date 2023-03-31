@@ -2,7 +2,7 @@
   <master auto="start"/>
   <!-- Configure and start stage_ros simulator-->
   <param name="/use_sim_time" value="true"/>
-  <node name="map_server" pkg="map_server" type="map_server" args="$(find stage_soil_mapping_mrs)/stage_config/maps/Compaction_Field.pgm 0.05" respawn="false" />
+  <node name="map_server" pkg="map_server" type="map_server" args="-g $(find stage_soil_mapping_mrs)/stage_config/maps/Compaction_Field.pgm 0.05" respawn="false" />
 
   <node pkg="stage_ros_add_pose_and_crash" type="stageros" name="stageros" args="$(find stage_soil_mapping_mrs)/stage_config/worlds/10_Rob_Compaction.world" respawn="false">
     <param name="base_watchdog_timeout" value="0.2"/>
@@ -216,12 +216,15 @@
 
   <node pkg="stage_soil_mapping_mrs" type="metric_publisher" name="metric_publisher" respawn="false" output="screen" />
 
-<node pkg="stage_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen"
+  <node pkg="stage_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen"
   args='$(arg trial_num) 10 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor)'/>
   
   <node pkg="stage_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
 
-<node pkg="rosbag" type="record" name="rosbag_record"
-args='rosbag record -e "(.*)metrics(.*)|(.*)coordinator(.*)|(.*)amcl_pose(.*)|(.*)goal_queue(.*)|(.*)mock_pen_reading(.*)" --duration 2h -O $(find stage_soil_mapping_mrs)/bags/metrics.bag'
-respawn="false" output="screen" />
+  <node pkg="rosbag" type="record" name="rosbag_record"
+  args='rosbag record -e "(.*)metrics(.*)|(.*)coordinator(.*)|(.*)amcl_pose(.*)|(.*)goal_queue(.*)|(.*)mock_pen_reading(.*)" --duration $(arg sampling_time_budget)s -O $(find stage_soil_mapping_mrs)/bags/$(arg bag_name).bag'
+  respawn="false" output="screen" />
+
+  <node pkg="stage_soil_mapping_mrs" type="check_time_elapsed" name="check_time_elapsed" respawn="false" output="screen"
+  args='$(arg sampling_time_budget)'/>
 </launch>
