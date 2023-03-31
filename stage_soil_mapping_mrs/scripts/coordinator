@@ -90,6 +90,7 @@ class Coordinator:
         self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
         self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
+        self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True)
 
         # Define metrics
         self.RMSE = -1
@@ -211,6 +212,12 @@ class Coordinator:
             rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
 
             ta["robot_" + str(min_bid_index)].append(task)
+
+        # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
+        for robot in self.robots:
+            sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+            ta[robot] = sorted_tasks
+
         return ta
 
 
@@ -465,7 +472,11 @@ if __name__ == '__main__':
 
     # Wait for robot initial poses to be registered in the simulation
     rospy.loginfo("Waiting for robot initial poses to be registered in the simulation")
-    sleep(10)            
+    sleep(10)
+
+    # Publish to '/sim_initialized' topic
+    rospy.loginfo("Publishing to '/sim_initialized' topic")
+    coordinator.sim_initialized_pub.publish(True)
     
     # Initial task allocation
     if "round" in str(coordinator.ta_algo).lower() or "robin" in str(coordinator.ta_algo).lower() or "rr" in str(coordinator.ta_algo).lower():
