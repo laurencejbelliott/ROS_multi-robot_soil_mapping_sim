@@ -21,9 +21,6 @@ from shapely.geometry import MultiPoint
 import matplotlib
 matplotlib.use('Agg')
 
-# Set random seed for reproducibility
-random.seed(0)
-
 # TODO:
 # - Implement remaining features from Mesa simulation:
 #  * Sequential Single Item task allocation
@@ -68,6 +65,10 @@ class Coordinator:
         rospy.loginfo("Coordinator node initialised")
         
         self.trial_num = trial_num
+
+        # Set random seed for reproducibility
+        random.seed(trial_num)
+
         self.num_robots = num_robots
         self.ta_algo = ta_algo
         self.sampling_algo = sampling_algo
@@ -85,9 +86,6 @@ class Coordinator:
             self.tasks = self.grid_sampling()
         elif 'random' in str(self.sampling_algo).lower():
             self.tasks = self.random_sampling()
-        
-        self.start_time = rospy.Time.now().to_sec()
-        self.sampling_time_budget = 240 # seconds, as in Mesa sim trials
 
         self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
@@ -98,8 +96,6 @@ class Coordinator:
         self.RMSEpub = rospy.Publisher(namespace + node_name + "/" + "RMSE", Float64, queue_size=0, tcp_nodelay=True, latch=True)
         self.avgVar = -1
         self.avgVarpub = rospy.Publisher(namespace + node_name + "/" + "avgVar", Float64, queue_size=0, tcp_nodelay=True, latch=True)
-
-        self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
 
         # Initialise kriging maps
         self.interpolated_map = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
@@ -490,19 +486,6 @@ if __name__ == '__main__':
     
     coordinator.publish_ta(task_allocations)
 
-    # Speed up simulation
+    # Speed up simulation and keep coordinator node running until ROS is shutdown
     coordinator.sim_time_factor_pub.publish(increased_sim_speed)
-
-    # Check if sampling time budget has elapsed
-    while not rospy.is_shutdown():
-        now = rospy.Time.now().to_sec()
-        if now - coordinator.start_time > coordinator.sampling_time_budget:
-            rospy.loginfo("Sampling time budget elapsed (%s seconds)" % coordinator.sampling_time_budget)
-
-            # Set simulation time factor back to 1
-            coordinator.sim_time_factor_pub.publish(1)
-            coordinator.sampling_time_budget_elapsed_pub.publish(True)
-            sleep(5)
-            rospy.signal_shutdown("Sampling time budget elapsed")
-            break
-        rospy.sleep(0.1)
+    rospy.spin()
