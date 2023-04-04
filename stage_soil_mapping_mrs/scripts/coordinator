@@ -174,13 +174,14 @@ class Coordinator:
             ta[robot] = []
         print("Robots are: " + str(self.robots))
         for _ in range(len(self.tasks)):
-            task = self.tasks.pop(0)
-            # print("Robot ID for current allocation is " + str(self.rr_rob_index))
-            ta["robot_" + str(self.rr_rob_index)].append(task)
-            if self.rr_rob_index == len(self.robots) - 1:
-                self.rr_rob_index = 0
-            else:
-                self.rr_rob_index += 1
+            if len(self.tasks) > 0:
+                task = self.tasks.pop(0)
+                # print("Robot ID for current allocation is " + str(self.rr_rob_index))
+                ta["robot_" + str(self.rr_rob_index)].append(task)
+                if self.rr_rob_index == len(self.robots) - 1:
+                    self.rr_rob_index = 0
+                else:
+                    self.rr_rob_index += 1
         return ta
     
 
@@ -191,27 +192,28 @@ class Coordinator:
             ta[robot] = []
         print("Robots are: " + str(self.robots))
         for _ in range(len(self.tasks)):
-            task = self.tasks.pop(0)
-            bids = []
-            for robot in self.robots:
-                # Get robot position
-                robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
-                robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
+            if len(self.tasks) > 0:
+                task = self.tasks.pop(0)
+                bids = []
+                for robot in self.robots:
+                    # Get robot position
+                    robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
+                    robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
 
-                # Calculate path cost for robot to navigate to task
-                bid = self.calculate_path_cost(robot_position, task)
-                bids.append(bid)
-            
-            rospy.loginfo("\nTask: " + str(task) + ". Bids:")
-            for b in range(len(bids)):
-                rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
+                    # Calculate path cost for robot to navigate to task
+                    bid = self.calculate_path_cost(robot_position, task)
+                    bids.append(bid)
+                
+                rospy.loginfo("\nTask: " + str(task) + ". Bids:")
+                for b in range(len(bids)):
+                    rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
 
-            # Get index of max bid
-            min_bid_index = bids.index(min(bids))
+                # Get index of max bid
+                min_bid_index = bids.index(min(bids))
 
-            rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
+                rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
 
-            ta["robot_" + str(min_bid_index)].append(task)
+                ta["robot_" + str(min_bid_index)].append(task)
 
         # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
         for robot in self.robots:
