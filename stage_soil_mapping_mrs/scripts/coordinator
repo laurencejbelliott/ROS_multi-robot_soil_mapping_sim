@@ -112,7 +112,8 @@ class Coordinator:
         self.numSamples = 0
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
 
-        # If task allocation algorithm is 'dynamic', partition the environment into a grid
+        # If task allocation algorithm is 'dynamic', partition the environment into a grid,
+        # this is used to address oversampling in the dynamic sampling algorithm
         if 'dynamic' in str(self.sampling_algo).lower():
             ds_grid_resolution = 10 # metres
             ds_grid_x = np.arange(0, env_width, ds_grid_resolution)
@@ -121,11 +122,6 @@ class Coordinator:
             for x in range(len(ds_grid_x)):
                 for y in range(len(ds_grid_y)):
                     cell_id_map.append([x, y])
-
-            # # Log cell_id to cell mapping for debugging
-            # rospy.loginfo("Cell ID to cell mapping:")
-            # for cell_id in range(0, len(cell_id_map)):
-            #     rospy.loginfo("Cell ID: {}, Cell: {}".format(cell_id, cell_id_map[cell_id]))
 
             # Assign each cell of the kriging grid to a cell of the dynamic sampling grid
             self.ds_grid = np.ones((env_width, env_height)) * -1
@@ -150,7 +146,6 @@ class Coordinator:
                                 continue
                             else:
                                 cell_id = cell_id_map.index([ds_grid_x_ix, ds_grid_y_ix])
-                                # rospy.loginfo("Cell ID: {}, Cell: {}".format(cell_id, cell_id_map[cell_id]))
                                 self.ds_grid[x][y] = cell_id
             
             # Plot the dynamic sampling grid
@@ -167,8 +162,6 @@ class Coordinator:
             plt.close()
             rospy.loginfo("Dynamic sampling grid saved to {}".format(package_path+"/include/ds_grid.png"))
                             
-                                
-
         
         # Set of robots
         self.robots = ["robot_" + str(r) for r in range(self.num_robots)]
@@ -404,14 +397,13 @@ class Coordinator:
         return pose
     
     def new_sample_callback(self, data):
-        self.numSamples += 1
         self.metricPubNumSamples()
         self.interpolate_and_visualise(data.data)
         self.metricPubRMSE()
         self.metricPubAvgVariance()
 
         # Generate new sampling goals
-        if "grid" not in self.sampling_algo:
+        if "grid" not in self.sampling_algo and not ("dynamic" in self.sampling_algo and self.numSamples < 3):
             if "random" in self.sampling_algo:
                 self.tasks += self.random_sampling()
             
@@ -421,6 +413,7 @@ class Coordinator:
             if "SSI" in str(self.ta_algo).upper():
                 rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
                 self.publish_ta(self.ssi_ta())
+            self.numSamples += 1
 
     def metricPubRMSE(self): # Publish Root Mean Squared Error
         self.RMSEpub.publish(self.RMSE)
@@ -536,6 +529,16 @@ if __name__ == '__main__':
     # Publish to '/sim_initialized' topic
     rospy.loginfo("Publishing to '/sim_initialized' topic")
     coordinator.sim_initialized_pub.publish(True)
+
+    # If task allocation algorithm is 'dynamic', have each robot sample at its initial position
+    # get initial kriging variance needed to select sampling points
+    if 'dynamic' in str(coordinator.sampling_algo).lower():
+        ta = {}
+        for robot in coordinator.robots:
+            robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
+            robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
+            ta[robot] = [robot_position]
+        coordinator.publish_ta(ta)
     
     # Initial task allocation
     if "round" in str(coordinator.ta_algo).lower() or "robin" in str(coordinator.ta_algo).lower() or "rr" in str(coordinator.ta_algo).lower():
