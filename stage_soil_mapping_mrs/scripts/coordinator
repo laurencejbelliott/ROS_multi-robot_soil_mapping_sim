@@ -8,6 +8,7 @@ import rospkg
 import json
 import random
 import sys
+import copy
 import cv2
 from math import sqrt
 from time import sleep
@@ -100,6 +101,10 @@ class Coordinator:
         # Initialise kriging maps
         self.interpolated_map = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
         self.kriging_variance = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
+        
+        if "dynamic" in str(self.sampling_algo).lower():
+            self.sampled_mask = np.zeros((ground_truth.shape[0], ground_truth.shape[1]))
+
         self.interpolated_map_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
         self.kriging_variance_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
 
@@ -111,6 +116,9 @@ class Coordinator:
 
         self.numSamples = 0
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
+
+        self.tasks = []
+
 
         # If task allocation algorithm is 'dynamic', partition the environment into a grid,
         # this is used to address oversampling in the dynamic sampling algorithm
@@ -207,6 +215,14 @@ class Coordinator:
         plt.title("Ground truth with initial random sampling")
         plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png')
         rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/include/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png")
+
+        return points
+    
+    def dynamic_sampling(self):
+        # Get the x highest variance points, where x is the number of robots
+        # Need to modify this later to only select from points that are not in a cluster that has already been sampled
+        kriging_variance_masked = copy.deepcopy(self.kriging_variance) * self.sampled_mask
+        points = list(np.argpartition(kriging_variance_masked, -self.num_robots)[-self.num_robots:])
 
         return points
 
@@ -331,6 +347,7 @@ class Coordinator:
             m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
 
             self.interpolated_map, self.kriging_variance = m, v
+
             # Publish interpolation maps
             interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
             kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
@@ -397,15 +414,27 @@ class Coordinator:
         return pose
     
     def new_sample_callback(self, data):
+        # Update sampled cells mask
+        
+        data_json = copy.deepcopy(data)
+
+        data_json = str(data_json.data).replace("'", '"')
+        data_json = json.loads(data_json)
+
+        self.sampled_mask[int(data_json["y"])][int(data_json["x"])] = -1
+
         self.metricPubNumSamples()
         self.interpolate_and_visualise(data.data)
         self.metricPubRMSE()
         self.metricPubAvgVariance()
 
         # Generate new sampling goals
-        if "grid" not in self.sampling_algo and not ("dynamic" in self.sampling_algo and self.numSamples < 3):
+        if "grid" not in self.sampling_algo:
             if "random" in self.sampling_algo:
                 self.tasks += self.random_sampling()
+            elif "dynamic" in self.sampling_algo and self.numSamples >= 2:
+                rospy.loginfo("Generating sampling goals with dynamic sampling...")
+                self.tasks += self.dynamic_sampling()
             
             if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
                 rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
@@ -520,11 +549,9 @@ if __name__ == '__main__':
             coordinator.robot_pose_pubs[robot].publish(pose)
 
 
-            
-
     # Wait for robot initial poses to be registered in the simulation
     rospy.loginfo("Waiting for robot initial poses to be registered in the simulation")
-    sleep(10)
+    sleep(5)
 
     # Publish to '/sim_initialized' topic
     rospy.loginfo("Publishing to '/sim_initialized' topic")
@@ -539,6 +566,13 @@ if __name__ == '__main__':
             robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
             ta[robot] = [robot_position]
         coordinator.publish_ta(ta)
+
+        # Wait for robots to finish sampling initial positions
+        rospy.sleep(20)
+
+        # # Run initial dynamic sampling
+        # coordinator.tasks = coordinator.dynamic_sampling()
+
     
     # Initial task allocation
     if "round" in str(coordinator.ta_algo).lower() or "robin" in str(coordinator.ta_algo).lower() or "rr" in str(coordinator.ta_algo).lower():
