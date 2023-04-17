@@ -8,10 +8,14 @@ import rospkg
 import json
 import random
 import sys
+import os
 import copy
+import operator
+import shutil
 import cv2
 from math import sqrt
 from time import sleep
+
 from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
@@ -76,6 +80,14 @@ class Coordinator:
 
         self.robot_speed = 2.0 # m/s
 
+        # Delete existing figures
+        shutil.rmtree(package_path+'/figures/')
+        # Recreate figures directory
+        os.mkdir(package_path+'/figures/')
+        os.mkdir(package_path+'/figures/sampled_cell_masks/')
+        os.mkdir(package_path+'/figures/kriging_variance_masks/')
+        
+
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
             self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
 
@@ -92,6 +104,11 @@ class Coordinator:
         self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
         self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True)
 
+        self.allocated_course_cells = []
+        self.ds_grid_mean_kriging_variance = {}
+        self.sampled_cells_colorbar_plotted = False
+        self.kriging_variance_colorbar_plotted = False
+
         # Define metrics
         self.RMSE = -1
         self.RMSEpub = rospy.Publisher(namespace + node_name + "/" + "RMSE", Float64, queue_size=0, tcp_nodelay=True, latch=True)
@@ -103,7 +120,7 @@ class Coordinator:
         self.kriging_variance = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
         
         if "dynamic" in str(self.sampling_algo).lower():
-            self.sampled_mask = np.zeros((ground_truth.shape[0], ground_truth.shape[1]))
+            self.sampled_mask = np.ones((ground_truth.shape[0], ground_truth.shape[1]))
 
         self.interpolated_map_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
         self.kriging_variance_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
@@ -126,7 +143,10 @@ class Coordinator:
             ds_grid_resolution = 10 # metres
             ds_grid_x = np.arange(0, env_width, ds_grid_resolution)
             ds_grid_y = np.arange(0, env_height, ds_grid_resolution)
+            self.ds_grid_x = ds_grid_x
+            self.ds_grid_y = ds_grid_y
             cell_id_map = []
+            self.course_cell_mean_variances = []
             for x in range(len(ds_grid_x)):
                 for y in range(len(ds_grid_y)):
                     cell_id_map.append([x, y])
@@ -166,14 +186,15 @@ class Coordinator:
             plt.colorbar()
 
             plt.title("Dynamic sampling grid")
-            plt.savefig(package_path+"/include/ds_grid.png")
+            plt.savefig(package_path+"/figures/ds_grid.png")
             plt.close()
-            rospy.loginfo("Dynamic sampling grid saved to {}".format(package_path+"/include/ds_grid.png"))
+            rospy.loginfo("Dynamic sampling grid saved to {}".format(package_path+"/figures/ds_grid.png"))
                             
         
         # Set of robots
         self.robots = ["robot_" + str(r) for r in range(self.num_robots)]
         self.robot_pose_pubs = {}
+        self.robot_intial_poses = {}
         for robot in self.robots:
             self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
 
@@ -198,8 +219,8 @@ class Coordinator:
         # Plot X and Y of points.geoms tuples
         plt.plot([p.x for p in points.geoms], [p.y for p in points.geoms], 'ro')
         plt.title("Ground truth with sampling grid")
-        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png')
-        rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/include/stage_soil_mapping_mrs/ground_truth_and_sampling.png")
+        plt.savefig(package_path+'/figures/stage_soil_mapping_mrs/ground_truth_and_sampling.png')
+        rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/figures/stage_soil_mapping_mrs/ground_truth_and_sampling.png")
         
         # Convert points.geoms into list of tuples and return
         return [(p.x, p.y) for p in points.geoms]
@@ -213,18 +234,55 @@ class Coordinator:
         # Plot X and Y of tuples
         plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
         plt.title("Ground truth with initial random sampling")
-        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png')
-        rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/include/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png")
+        plt.savefig(package_path+'/figures/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png')
+        rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/figures/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png")
 
         return points
     
     def dynamic_sampling(self):
-        # Get the x highest variance points, where x is the number of robots
-        # Need to modify this later to only select from points that are not in a cluster that has already been sampled
-        kriging_variance_masked = copy.deepcopy(self.kriging_variance) * self.sampled_mask
-        points = list(np.argpartition(kriging_variance_masked, -self.num_robots)[-self.num_robots:])
+        # Get the 2x highest mean kriging variance course-grain cells, where x is the number of robots
+        points = []
+
+        # Get the mean kriging variance for each cell in the dynamic sampling grid
+        num_sampling_grid_cells = len(self.ds_grid_x) * len(self.ds_grid_y)
+        self.ds_grid_mean_kriging_variance = {}
+        for cell_id in range(num_sampling_grid_cells):
+            # Get the indices of the cells in the dynamic sampling grid that belong to the current cell_id
+            cell_indices = np.argwhere(self.ds_grid == cell_id)
+            # Get the mean kriging variance of the current cell_id
+            self.ds_grid_mean_kriging_variance[cell_id] = np.mean(self.kriging_variance[cell_indices[:, 0:-1], cell_indices[:, 1:-1]])
+
+        # Exclude the cells that have already been allocated
+        for cell_id in self.allocated_course_cells:
+            try:
+                self.ds_grid_mean_kriging_variance.pop(cell_id)
+            except KeyError:
+                pass
+
+        # Get the 2x highest mean kriging variance cells
+        sorted_ds_grid_mean_kriging_variance = sorted(copy.deepcopy(self.ds_grid_mean_kriging_variance).items(), key=operator.itemgetter(1), reverse=True)
+
+        goal_cells = []
+        # Exclude these cells from future rounds of dynamic sampling
+        for cell_id, _ in sorted_ds_grid_mean_kriging_variance[:self.num_robots*2]:
+            self.allocated_course_cells.append(cell_id)
+            goal_cells.append(cell_id)
+
+        # Get the highest kriging variance cell (point) in each of the more course-grain cells which have the highest mean kriging variance
+        for cell_id in goal_cells:
+            # Get the indices of the cells in the dynamic sampling grid that belong to the current cell_id
+            cell_indices = np.argwhere(self.ds_grid == cell_id)
+            # rospy.loginfo("cell_indices: " + str(cell_indices))
+            kriging_v_rotated = np.rot90(self.kriging_variance)
+            kriging_variance_cropped_to_cell = kriging_v_rotated[cell_indices[:, 0], cell_indices[:, 1]]
+            # rospy.loginfo("kriging_variance_cropped_to_cell: " + str(kriging_variance_cropped_to_cell))
+            max_v_cell = cell_indices[np.unravel_index(kriging_variance_cropped_to_cell.argmax(), kriging_variance_cropped_to_cell.shape)[0]]
+            points.append(max_v_cell)
+
+        # rospy.loginfo("New dynamic sampling goals: " + str(points))
 
         return points
+
 
 
     def calculate_path_cost(self, robot_position, task_position):
@@ -405,7 +463,7 @@ class Coordinator:
             pose.position.x = random.uniform(1, 6)
             pose.position.y = random.uniform(1, env_height-1)
         
-        # Convert position from stage coordinates to ROS coordinates
+        # # Convert position from stage coordinates to ROS coordinates
         pose.position.x = pose.position.x - env_width/2
         pose.position.y = pose.position.y - env_height/2
 
@@ -421,7 +479,30 @@ class Coordinator:
         data_json = str(data_json.data).replace("'", '"')
         data_json = json.loads(data_json)
 
-        self.sampled_mask[int(data_json["y"])][int(data_json["x"])] = -1
+        cluster_id = self.ds_grid[int(data_json["x"])][int(data_json["y"])]
+        self.sampled_mask[self.ds_grid_rotated == cluster_id] = -1
+        
+        # Save visualisation of sampled cells mask
+        if self.numSamples % 5 == 0: # Save every 5 samples
+            plt.imshow(self.sampled_mask)
+            plt.title("Sampled cells mask")
+            plt.colorbar()
+            plt.annotate("Min: " + str(np.min(self.sampled_mask)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+            plt.annotate("Max: " + str(np.max(self.sampled_mask)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+            plt.savefig(package_path+"/figures/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
+            plt.close()
+
+            # Save visualisation of kriging variance with sampled cells mask applied
+            variance_masked = self.kriging_variance * self.sampled_mask
+            plt.imshow(variance_masked)
+            plt.title("Kriging variance with sampled cells convolution applied")
+            plt.colorbar()
+            plt.annotate("Min: " + str(np.min(variance_masked)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+            plt.annotate("Max: " + str(np.max(variance_masked)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+            plt.annotate("Mean: " + str(np.mean(variance_masked)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+            plt.annotate("Median: " + str(np.median(variance_masked)), (0, 0), (0, -80), xycoords='axes fraction', textcoords='offset points', va='top')
+            plt.savefig(package_path+"/figures/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
+            plt.close()
 
         self.metricPubNumSamples()
         self.interpolate_and_visualise(data.data)
@@ -433,8 +514,9 @@ class Coordinator:
             if "random" in self.sampling_algo:
                 self.tasks += self.random_sampling()
             elif "dynamic" in self.sampling_algo and self.numSamples >= 2:
-                rospy.loginfo("Generating sampling goals with dynamic sampling...")
-                self.tasks += self.dynamic_sampling()
+                if np.mean(self.kriging_variance) >= -1:
+                    rospy.loginfo("Generating sampling goals with dynamic sampling...")
+                    self.tasks += self.dynamic_sampling()
             
             if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
                 rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
@@ -442,7 +524,7 @@ class Coordinator:
             if "SSI" in str(self.ta_algo).upper():
                 rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
                 self.publish_ta(self.ssi_ta())
-            self.numSamples += 1
+        self.numSamples += 1
 
     def metricPubRMSE(self): # Publish Root Mean Squared Error
         self.RMSEpub.publish(self.RMSE)
@@ -493,12 +575,14 @@ if __name__ == '__main__':
             pose = Pose()
             pose.position.x = random.uniform(1, 5)
             pose.position.y = random.uniform(env_height-6, env_height-1)
+            pose.orientation.w = 1
+
+            coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
 
             # Convert position from stage coordinates to ROS coordinates
             pose.position.x = pose.position.x - env_width/2
             pose.position.y = pose.position.y - env_height/2
 
-            pose.orientation.w = 1
             coordinator.robot_pose_pubs[robot].publish(pose)
             rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
     elif robot_init_pose_algorithm == "random edge":
@@ -510,6 +594,7 @@ if __name__ == '__main__':
 
             # Choose random pose within 5m of the edge
             pose = coordinator.random_edge_pose()
+            coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
             coordinator.robot_pose_pubs[robot].publish(pose)
             rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
     elif robot_init_pose_algorithm == "random edge and robot":
@@ -520,6 +605,7 @@ if __name__ == '__main__':
         for robot in coordinator.robots:
             if first_robot:
                 pose = coordinator.random_edge_pose()
+                coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
                 coordinator.robot_pose_pubs[robot].publish(pose)
                 rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
                 first_robot_pose = pose
@@ -532,11 +618,17 @@ if __name__ == '__main__':
                     pose = coordinator.random_edge_pose()
                     distance = sqrt((pose.position.x - first_robot_pose.position.x)**2 + (pose.position.y - first_robot_pose.position.y)**2)
 
+                coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
                 coordinator.robot_pose_pubs[robot].publish(pose)
                 rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
     elif robot_init_pose_algorithm == "random":
         rospy.loginfo("Setting robot poses using 'random' algorithm")
         for robot in coordinator.robots:
+            x = random.uniform(1, env_width-1)
+            y = random.uniform(1, env_height-1)
+            coordinator.robot_intial_poses[robot] = (x, y)
+            rospy.loginfo("Robot " + robot + " initial pose: " + str((x, y)))
+
             pose = Pose()
             pose.position.x = random.uniform(1, env_width-1)
             pose.position.y = random.uniform(1, env_height-1)
@@ -562,8 +654,9 @@ if __name__ == '__main__':
     if 'dynamic' in str(coordinator.sampling_algo).lower():
         ta = {}
         for robot in coordinator.robots:
-            robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
-            robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
+            robot_pose = rospy.wait_for_message("/"+robot+"/amcl_pose", PoseWithCovarianceStamped)
+            robot_position = (robot_pose.pose.pose.position.x, robot_pose.pose.pose.position.y)
+
             ta[robot] = [robot_position]
         coordinator.publish_ta(ta)
 
@@ -586,7 +679,7 @@ if __name__ == '__main__':
                 plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'ro')
             elif robot == "robot_1":
                 plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
-        plt.savefig(package_path+'/include/stage_soil_mapping_mrs/round_robin_task_allocation.png')
+        plt.savefig(package_path+'/figures/stage_soil_mapping_mrs/round_robin_task_allocation.png')
     elif "SSI" in str(coordinator.ta_algo).upper():
         task_allocations = coordinator.ssi_ta()
         rospy.loginfo("SSI task allocations: " + str(task_allocations))
