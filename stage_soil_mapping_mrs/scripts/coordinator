@@ -128,8 +128,13 @@ class Coordinator:
         # Publish placeholder maps before any data is received
         interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
         kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
+
+        ground_truth_ros = self.numpy_array_to_occupancy_grid(ground_truth.astype(np.int8))
+        ground_truth_ros_pub = rospy.Publisher(namespace + node_name + "/" + "ground_truth", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+
         self.interpolated_map_pub.publish(interpolated_map_ros)
         self.kriging_variance_pub.publish(kriging_variance_ros)
+        ground_truth_ros_pub.publish(ground_truth_ros)
 
         self.numSamples = 0
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
@@ -219,8 +224,8 @@ class Coordinator:
         # Plot X and Y of points.geoms tuples
         plt.plot([p.x for p in points.geoms], [p.y for p in points.geoms], 'ro')
         plt.title("Ground truth with sampling grid")
-        plt.savefig(package_path+'/figures/stage_soil_mapping_mrs/ground_truth_and_sampling.png')
-        rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/figures/stage_soil_mapping_mrs/ground_truth_and_sampling.png")
+        plt.savefig(package_path+'/figures/ground_truth_and_sampling.png')
+        rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/figures/ground_truth_and_sampling.png")
         
         # Convert points.geoms into list of tuples and return
         return [(p.x, p.y) for p in points.geoms]
@@ -234,8 +239,8 @@ class Coordinator:
         # Plot X and Y of tuples
         plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
         plt.title("Ground truth with initial random sampling")
-        plt.savefig(package_path+'/figures/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png')
-        rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/figures/stage_soil_mapping_mrs/ground_truth_and_random_sampling.png")
+        plt.savefig(package_path+'/figures/ground_truth_and_random_sampling.png')
+        rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/figures/ground_truth_and_random_sampling.png")
 
         return points
     
@@ -679,7 +684,7 @@ if __name__ == '__main__':
                 plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'ro')
             elif robot == "robot_1":
                 plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
-        plt.savefig(package_path+'/figures/stage_soil_mapping_mrs/round_robin_task_allocation.png')
+        plt.savefig(package_path+'/figures/round_robin_task_allocation.png')
     elif "SSI" in str(coordinator.ta_algo).upper():
         task_allocations = coordinator.ssi_ta()
         rospy.loginfo("SSI task allocations: " + str(task_allocations))

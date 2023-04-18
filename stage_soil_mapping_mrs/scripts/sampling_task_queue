@@ -87,7 +87,7 @@ def pub_mock_pen_reading(goal):
         pose_y = goal.target_pose.pose.position.y
         data_x, data_y = math.floor(pose_x), math.floor(pose_y)
     rospy.sleep(1)
-    mock_reading = mock_pen_data[data_x, data_y]
+    mock_reading = mock_pen_data[data_y, data_x]
     reading_dict = {'robot_id': namespace.strip("/"), 'x': pose_x, 'y': pose_y, 'reading': mock_reading}
     rospy.loginfo(namespace[1:-1] + " sampled " + str(reading_dict))
     reading_msg = message_converter.convert_dictionary_to_ros_message('std_msgs/String',
@@ -182,8 +182,6 @@ if __name__ == '__main__':
               'rb') as f:
         mock_pen_data = pickle.load(f)
     mock_pen_data = np.array(mock_pen_data)
-    mock_pen_data = np.rot90(mock_pen_data)
-    mock_pen_data = np.flipud(mock_pen_data)
 
     mock_pen_reading_pub = rospy.Publisher(namespace + node_name + "/mock_pen_reading", String, queue_size=1)
     queue_nav_goal_listener()
