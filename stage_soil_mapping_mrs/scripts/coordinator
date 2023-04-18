@@ -477,37 +477,37 @@ class Coordinator:
         return pose
     
     def new_sample_callback(self, data):
-        # Update sampled cells mask
-        
-        data_json = copy.deepcopy(data)
+        if self.sampling_algo == "dynamic":
+            # Update sampled cells mask
+            data_json = copy.deepcopy(data)
 
-        data_json = str(data_json.data).replace("'", '"')
-        data_json = json.loads(data_json)
+            data_json = str(data_json.data).replace("'", '"')
+            data_json = json.loads(data_json)
 
-        cluster_id = self.ds_grid[int(data_json["x"])][int(data_json["y"])]
-        self.sampled_mask[self.ds_grid_rotated == cluster_id] = -1
-        
-        # Save visualisation of sampled cells mask
-        if self.numSamples % 5 == 0: # Save every 5 samples
-            plt.imshow(self.sampled_mask)
-            plt.title("Sampled cells mask")
-            plt.colorbar()
-            plt.annotate("Min: " + str(np.min(self.sampled_mask)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
-            plt.annotate("Max: " + str(np.max(self.sampled_mask)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-            plt.savefig(package_path+"/figures/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
-            plt.close()
+            cluster_id = self.ds_grid[int(data_json["x"])][int(data_json["y"])]
+            self.sampled_mask[self.ds_grid_rotated == cluster_id] = -1
+            
+            # Save visualisation of sampled cells mask
+            if self.numSamples % 5 == 0: # Save every 5 samples
+                plt.imshow(self.sampled_mask)
+                plt.title("Sampled cells mask")
+                plt.colorbar()
+                plt.annotate("Min: " + str(np.min(self.sampled_mask)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Max: " + str(np.max(self.sampled_mask)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.savefig(package_path+"/figures/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
+                plt.close()
 
-            # Save visualisation of kriging variance with sampled cells mask applied
-            variance_masked = self.kriging_variance * self.sampled_mask
-            plt.imshow(variance_masked)
-            plt.title("Kriging variance with sampled cells convolution applied")
-            plt.colorbar()
-            plt.annotate("Min: " + str(np.min(variance_masked)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
-            plt.annotate("Max: " + str(np.max(variance_masked)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-            plt.annotate("Mean: " + str(np.mean(variance_masked)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
-            plt.annotate("Median: " + str(np.median(variance_masked)), (0, 0), (0, -80), xycoords='axes fraction', textcoords='offset points', va='top')
-            plt.savefig(package_path+"/figures/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
-            plt.close()
+                # Save visualisation of kriging variance with sampled cells mask applied
+                variance_masked = self.kriging_variance * self.sampled_mask
+                plt.imshow(variance_masked)
+                plt.title("Kriging variance with sampled cells convolution applied")
+                plt.colorbar()
+                plt.annotate("Min: " + str(np.min(variance_masked)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Max: " + str(np.max(variance_masked)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Mean: " + str(np.mean(variance_masked)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Median: " + str(np.median(variance_masked)), (0, 0), (0, -80), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.savefig(package_path+"/figures/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
+                plt.close()
 
         self.metricPubNumSamples()
         self.interpolate_and_visualise(data.data)
@@ -654,7 +654,7 @@ if __name__ == '__main__':
     rospy.loginfo("Publishing to '/sim_initialized' topic")
     coordinator.sim_initialized_pub.publish(True)
 
-    # If task allocation algorithm is 'dynamic', have each robot sample at its initial position
+    # If sampling algorithm is 'dynamic', have each robot sample at its initial position
     # get initial kriging variance needed to select sampling points
     if 'dynamic' in str(coordinator.sampling_algo).lower():
         ta = {}
@@ -671,6 +671,9 @@ if __name__ == '__main__':
         # # Run initial dynamic sampling
         # coordinator.tasks = coordinator.dynamic_sampling()
 
+    # If sampling algorithm is 'random', create random tasks
+    if 'random' in str(coordinator.sampling_algo).lower():
+        coordinator.tasks = coordinator.random_sampling()
     
     # Initial task allocation
     if "round" in str(coordinator.ta_algo).lower() or "robin" in str(coordinator.ta_algo).lower() or "rr" in str(coordinator.ta_algo).lower():
