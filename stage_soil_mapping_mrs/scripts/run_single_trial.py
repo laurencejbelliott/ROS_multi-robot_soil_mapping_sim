@@ -13,7 +13,7 @@ print(package_path)
 trial_num = 1
 num_robots = 3
 ta_algo = "SSI"
-sampling_algo = "random"
+sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
 sampling_time_budget = 1800 # seconds
 

@@ -11,10 +11,10 @@ from geometry_msgs.msg import Pose
 from nav_msgs.msg import Odometry
 # TODO: Add rospy_message_converter to rosdep dependencies
 from rospy_message_converter import message_converter
+import numpy as np
 
 # TODO:
 #  - Retry failed goals x times, then cancel goal and remove from queue
-#  - Insertion heuristic
 
 rospack = rospkg.RosPack()
 package_path = rospack.get_path('stage_soil_mapping_mrs')
@@ -80,6 +80,7 @@ def pub_mock_pen_reading(goal):
         # TODO: Calculate this offset as half of the environment size, rather than hard-coding it
         pose_x = goal.target_pose.pose.position.x
         pose_y = goal.target_pose.pose.position.y
+        # data_x, data_y = math.floor(pose_x), math.floor(pose_y)
         data_x, data_y = math.floor(pose_x), math.floor(pose_y)
     else:
         pose_x = goal.target_pose.pose.position.x
@@ -180,5 +181,7 @@ if __name__ == '__main__':
     with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolated_jaime_compaction_0cm_kpas.pickle',
               'rb') as f:
         mock_pen_data = pickle.load(f)
+    mock_pen_data = np.array(mock_pen_data)
+
     mock_pen_reading_pub = rospy.Publisher(namespace + node_name + "/mock_pen_reading", String, queue_size=1)
     queue_nav_goal_listener()
