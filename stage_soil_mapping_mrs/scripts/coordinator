@@ -64,7 +64,7 @@ id_arr = []
 
 
 class Coordinator:
-    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         
@@ -77,15 +77,22 @@ class Coordinator:
         self.ta_algo = ta_algo
         self.sampling_algo = sampling_algo
         self.env_crop_factor = env_crop_factor
+        self.figures_path = figures_path
+
+        # Save visualisation of ground truth
+        plt.imshow(ground_truth)
+        plt.colorbar
+
 
         self.robot_speed = 2.0 # m/s
 
-        # Delete existing figures
-        shutil.rmtree(package_path+'/figures/')
+        # Delete existing figures directory if it exists
+        if os.path.exists(self.figures_path):
+            shutil.rmtree(self.figures_path)
         # Recreate figures directory
-        os.mkdir(package_path+'/figures/')
-        os.mkdir(package_path+'/figures/sampled_cell_masks/')
-        os.mkdir(package_path+'/figures/kriging_variance_masks/')
+        os.mkdir(self.figures_path)
+        os.mkdir(self.figures_path+'/sampled_cell_masks/')
+        os.mkdir(self.figures_path+'/kriging_variance_masks/')
         
 
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
@@ -190,8 +197,8 @@ class Coordinator:
             plt.imshow(self.ds_grid_rotated, origin='lower', cmap='jet', interpolation='none')
             plt.colorbar()
 
-            plt.title("Dynamic sampling grid")
-            plt.savefig(package_path+"/figures/ds_grid.png")
+            plt.title("Dynamic Sampling Grid")
+            plt.savefig(self.figures_path+"/ds_grid.png")
             plt.close()
             rospy.loginfo("Dynamic sampling grid saved to {}".format(package_path+"/figures/ds_grid.png"))
                             
@@ -223,8 +230,8 @@ class Coordinator:
         plt.colorbar()
         # Plot X and Y of points.geoms tuples
         plt.plot([p.x for p in points.geoms], [p.y for p in points.geoms], 'ro')
-        plt.title("Ground truth with sampling grid")
-        plt.savefig(package_path+'/figures/ground_truth_and_sampling.png')
+        plt.title("Ground-truth with Sampling Grid")
+        plt.savefig(self.figures_path+'/ground_truth_and_sampling.png')
         rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/figures/ground_truth_and_sampling.png")
         
         # Convert points.geoms into list of tuples and return
@@ -239,7 +246,7 @@ class Coordinator:
         # Plot X and Y of tuples
         plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
         plt.title("Ground truth with initial random sampling")
-        plt.savefig(package_path+'/figures/ground_truth_and_random_sampling.png')
+        plt.savefig(self.figures_path+'/ground_truth_and_random_sampling.png')
         rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/figures/ground_truth_and_random_sampling.png")
 
         return points
@@ -488,25 +495,25 @@ class Coordinator:
             self.sampled_mask[self.ds_grid_rotated == cluster_id] = -1
             
             # Save visualisation of sampled cells mask
-            if self.numSamples % 5 == 0: # Save every 5 samples
+            if self.numSamples % 1 == 0: # Save every 1 samples
                 plt.imshow(self.sampled_mask)
-                plt.title("Sampled cells mask")
+                plt.title("Sampled Cells Mask")
                 plt.colorbar()
                 plt.annotate("Min: " + str(np.min(self.sampled_mask)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.max(self.sampled_mask)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-                plt.savefig(package_path+"/figures/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
+                plt.savefig(self.figures_path+"/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
                 plt.close()
 
                 # Save visualisation of kriging variance with sampled cells mask applied
                 variance_masked = self.kriging_variance * self.sampled_mask
                 plt.imshow(variance_masked)
-                plt.title("Kriging variance with sampled cells convolution applied")
+                plt.title("Kriging Variance x Sampled Cells Convolution")
                 plt.colorbar()
                 plt.annotate("Min: " + str(np.min(variance_masked)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.max(variance_masked)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Mean: " + str(np.mean(variance_masked)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Median: " + str(np.median(variance_masked)), (0, 0), (0, -80), xycoords='axes fraction', textcoords='offset points', va='top')
-                plt.savefig(package_path+"/figures/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
+                plt.savefig(self.figures_path+"/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
                 plt.close()
 
         self.metricPubNumSamples()
@@ -551,8 +558,9 @@ if __name__ == '__main__':
         ta_algo = myargv[3]
         sampling_algo = myargv[4]
         env_crop_factor = int(myargv[5])
+        figures_path = myargv[6]
 
-        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor)
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path)
     else:
         rospy.logerr("No args provided")
         sys.exit(1)

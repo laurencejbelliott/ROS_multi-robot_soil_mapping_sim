@@ -18,6 +18,7 @@ ta_algo = "SSI"
 sampling_algo = "random"
 env_crop_factor = 1 # Environment cropping is not yet implemented
 sampling_time_budget = 240 # seconds, as in Mesa sim trials
+figures_path = package_path+'/figures/"',
 
 # Define sets of parameters to combine
 trial_num_set = set([i for i in range(1, 11)])
@@ -42,7 +43,7 @@ combinations = list(itertools.product(trial_num_set, num_robots_set, ta_algo_set
 combinations = [i for i in combinations if i[0] != i[1] != i[2] != i[3] != i[4]]
 total_trials = len(combinations)
 
-print("\nRunning" + str(total_trials) + "simulated trials:\n", combinations)
+print("\nRunning " + str(total_trials) + " simulated trials:\n", combinations)
 trial_count = 0
 for trial_params in combinations:
     trial_count += 1
@@ -54,6 +55,8 @@ for trial_params in combinations:
 
     # Check if trial has already run by checking if rosbag file exists
     bag_name = str(num_robots)+'_robs_'+str(ta_algo)+'_'+str(sampling_algo)+'_'+str(trial_num)
+    figures_path = package_path+'/figures/'+bag_name
+    
     if exists(package_path+'/bags/'+bag_name+'.bag'):
         print("Trial ", bag_name," (", trial_count, "/", total_trials,") has already been run, skipping...")
         continue
@@ -67,7 +70,8 @@ for trial_params in combinations:
                 'sampling_algo:="'+sampling_algo+'"',
                 'env_crop_factor:=1',
                 'bag_name:="'+bag_name+'"',
-                'sampling_time_budget:='+str(sampling_time_budget)
+                'sampling_time_budget:='+str(sampling_time_budget),
+                'figures_path:='+'"'+figures_path+'"'
                 ]
     roslaunch_args = cli_args[1:]
     roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]

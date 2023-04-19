@@ -117,7 +117,7 @@
   <node pkg="stage_soil_mapping_mrs" type="metric_publisher" name="metric_publisher" respawn="false" output="screen" />
 
   <node pkg="stage_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen"
-  args='$(arg trial_num) 5 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor)'/>
+  args='$(arg trial_num) 5 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor) $(arg figures_path)'/>
   
   <node pkg="stage_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
 
