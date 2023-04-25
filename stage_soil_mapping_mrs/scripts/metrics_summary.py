@@ -65,6 +65,8 @@ if __name__ == '__main__':
         # Get last step robot total_distance
         total_distance_msg = b.message_by_topic('/' + name + '/metrics/total_distance')
         total_distance_df = pd.read_csv(total_distance_msg)
+        print("Total distance DataFrame:\n" + str(total_distance_df))
+
         global_total_distance += total_distance_df.iloc[-1].data
 
         # Get last step robot total_idle_time
@@ -96,27 +98,32 @@ for name in robot_names:
     # Get last step robot total_distance
     total_distance_msg = b.message_by_topic('/' + name + '/metrics/total_distance')
     total_distance_df = pd.read_csv(total_distance_msg)
-    metrics_df = metrics_df.append({'Metric': 'Total distance travelled (m)', 'Robot Name': name, 'Value': total_distance_df.iloc[-1].data}, ignore_index=True)
+    # metrics_df = metrics_df.append({'Metric': 'Total distance travelled (m)', 'Robot Name': name, 'Value': total_distance_df.iloc[-1].data}, ignore_index=True)
+    metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total distance travelled (m)', 'Robot Name': name, 'Value': total_distance_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
     # Get last step robot total_idle_time
     total_idle_time_msg = b.message_by_topic('/' + name + '/metrics/total_idle_time')
     total_idle_time_df = pd.read_csv(total_idle_time_msg)
-    metrics_df = metrics_df.append({'Metric': 'Total idle time (s)', 'Robot Name': name, 'Value': total_idle_time_df.iloc[-1].data}, ignore_index=True)
+    # metrics_df = metrics_df.append({'Metric': 'Total idle time (s)', 'Robot Name': name, 'Value': total_idle_time_df.iloc[-1].data}, ignore_index=True)
+    metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total idle time (s)', 'Robot Name': name, 'Value': total_idle_time_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
     # Get last step robot mean_task_completion_time
     mean_task_completion_time_msg = b.message_by_topic('/' + name + '/metrics/mean_task_completion_time')
     mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
-    metrics_df = metrics_df.append({'Metric': 'Mean task completion time (s)', 'Robot Name': name, 'Value': mean_task_completion_time_df.iloc[-1].data}, ignore_index=True)
+    # metrics_df = metrics_df.append({'Metric': 'Mean task completion time (s)', 'Robot Name': name, 'Value': mean_task_completion_time_df.iloc[-1].data}, ignore_index=True)
+    metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean task completion time (s)', 'Robot Name': name, 'Value': mean_task_completion_time_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
 # Append last step kriging RMSE
 rmse_msg = b.message_by_topic('/coordinator/RMSE')
 rmse_df = pd.read_csv(rmse_msg)
-metrics_df = metrics_df.append({'Metric': 'Kriging RMSE (Root Mean Squared Error)', 'Robot Name': "NA", 'Value': rmse_df.iloc[-1].data}, ignore_index=True)
+# metrics_df = metrics_df.append({'Metric': 'Kriging RMSE (Root Mean Squared Error)', 'Robot Name': "NA", 'Value': rmse_df.iloc[-1].data}, ignore_index=True)
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Kriging RMSE (Root Mean Squared Error)', 'Robot Name': "NA", 'Value': rmse_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
 # Append last step mean kriging variance
 avgVar_msg = b.message_by_topic('/coordinator/avgVar')
 avgVar_df = pd.read_csv(avgVar_msg)
-metrics_df = metrics_df.append({'Metric': 'Mean kriging variance', 'Robot Name': "NA", 'Value': avgVar_df.iloc[-1].data}, ignore_index=True)
+# metrics_df = metrics_df.append({'Metric': 'Mean kriging variance', 'Robot Name': "NA", 'Value': avgVar_df.iloc[-1].data}, ignore_index=True)
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean kriging variance', 'Robot Name': "NA", 'Value': avgVar_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
 # Save metrics DataFrame to csv
 metrics_df.to_csv(bag_folder_path + "/metrics.csv", index=False)

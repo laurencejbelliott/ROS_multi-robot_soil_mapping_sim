@@ -15,7 +15,7 @@ num_robots = 3
 ta_algo = "SSI"
 sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
-sampling_time_budget = 240 # seconds
+sampling_time_budget = 99999 # seconds
 
 cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
             'trial_num:='+str(trial_num),
@@ -25,7 +25,7 @@ cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compact
             'env_crop_factor:=1',
             'bag_name:="metrics"',
             'sampling_time_budget:='+str(sampling_time_budget),
-            'figures_path:='+'"'+package_path+'/figures/test_run"',
+            'figures_path:='+'"'+package_path+'/figures/test_run"'
             ]
 roslaunch_args = cli_args[1:]
 roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]

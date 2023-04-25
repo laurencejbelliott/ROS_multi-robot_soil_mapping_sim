@@ -30,11 +30,28 @@ if __name__ == "__main__":
     # Define publishers and metrics
     publishers = {}
     metrics = {}
-    publish_rate = 0.5 # Hz
+    publish_rate = 2 # Hz
+
+    def pose_callback(msg, robot):
+        # Get position
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+
+        # Calculate distance travelled
+        if len(metrics[robot]["positions"]) > 0:
+            last_pos = metrics[robot]["positions"][-1]
+            distance = math.sqrt((x - last_pos[0]) ** 2 + (y - last_pos[1]) ** 2)
+            metrics[robot]["total_distance"] += distance
+
+        # Store position
+        metrics[robot]["positions"].append((x, y))
+
+        # Publish total distance
+        publishers[robot]["total_distance_pub"].publish(metrics[robot]["total_distance"])
+
 
     # Wait for sim_initialized topic to be published
     rospy.wait_for_message("/sim_initialized", Bool)
-
 
     for robot in robots:
         publishers[robot] = {}
@@ -44,6 +61,10 @@ if __name__ == "__main__":
         publishers[robot]["total_distance_pub"] = rospy.Publisher(
             "/{}/metrics/total_distance".format(robot), Float32, queue_size=1
         )
+
+        # Subscriber to amcl_pose
+        rospy.Subscriber("/{}/amcl_pose".format(robot), PoseWithCovarianceStamped, pose_callback, robot)
+
         rospy.loginfo("Created publisher for /{}/metrics/total_distance".format(robot))
         metrics[robot]["positions"] = []  # List of 2D positions tuple (x, y)
         metrics[robot]["total_distance"] = 0
@@ -67,17 +88,6 @@ if __name__ == "__main__":
         # Calculate metrics
         for robot in robots:
             loop_start_time = rospy.get_time()
-            # Total distance travelled
-            pose = rospy.wait_for_message("/{}/amcl_pose".format(robot), PoseWithCovarianceStamped)
-            metrics[robot]["positions"].append((pose.pose.pose.position.x, pose.pose.pose.position.y))
-            if len(metrics[robot]["positions"]) > 1:
-                metrics[robot]["total_distance"] += math.sqrt(
-                    (metrics[robot]["positions"][-1][0] - metrics[robot]["positions"][-2][0]) ** 2
-                    + (metrics[robot]["positions"][-1][1] - metrics[robot]["positions"][-2][1]) ** 2
-                )
-
-            # Publish total distance travelled
-            publishers[robot]["total_distance_pub"].publish(metrics[robot]["total_distance"])
 
             # Total idle time
             goal_queue = rospy.wait_for_message("/{}/sampling_task_queue/goal_queue".format(robot), String)
