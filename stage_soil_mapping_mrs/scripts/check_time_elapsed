@@ -6,26 +6,38 @@ import rospy
 from time import sleep
 from std_msgs.msg import Bool, Float64
 
+sim_initialized = False
+start_time = None
+
+def sim_initialized_cb(msg):
+    global sim_initialized
+    global start_time
+
+    if not sim_initialized:
+        start_time = rospy.Time.now().to_sec()
+    sim_initialized = msg.data
+
 if __name__ == "__main__":
     myargv = rospy.myargv(argv=sys.argv)
     rospy.init_node("check_time_elapsed")
-    start_time = rospy.Time.now().to_sec()
     sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
     sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
+    sim_initialized_sub = rospy.Subscriber("/sim_initialized", Bool, sim_initialized_cb, queue_size=1)
 
     if len(myargv) > 0:
         sampling_time_budget = float(myargv[1])
 
     # Check if sampling time budget has elapsed
     while not rospy.is_shutdown():
-        now = rospy.Time.now().to_sec()
-        if now - start_time > sampling_time_budget:
-            # Set simulation time factor back to 1
-            sim_time_factor_pub.publish(1)
-            rospy.loginfo("Sampling time budget elapsed (%s seconds)" % sampling_time_budget)
+        if sim_initialized:
+            now = rospy.Time.now().to_sec()
+            if now - start_time > sampling_time_budget:
+                # Set simulation time factor back to 1
+                sim_time_factor_pub.publish(1)
+                rospy.loginfo("Sampling time budget elapsed (%s seconds)" % sampling_time_budget)
 
-            sampling_time_budget_elapsed_pub.publish(True)
-            sleep(5)
-            rospy.signal_shutdown("Sampling time budget elapsed")
-            break
-        rospy.sleep(0.1)
+                sampling_time_budget_elapsed_pub.publish(True)
+                sleep(5)
+                rospy.signal_shutdown("Sampling time budget elapsed")
+                break
+            rospy.sleep(0.1)
