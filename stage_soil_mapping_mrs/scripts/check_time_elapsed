@@ -2,8 +2,8 @@
 __author__ = "Laurence Roberts-Elliott"
 
 import sys
-import rospy
 from time import sleep
+import rospy
 from std_msgs.msg import Bool, Float64
 
 sim_initialized = False
