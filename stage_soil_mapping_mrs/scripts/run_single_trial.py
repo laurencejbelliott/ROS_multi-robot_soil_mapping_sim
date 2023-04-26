@@ -10,12 +10,12 @@ package_path = rospack.get_path('stage_soil_mapping_mrs')
 
 print(package_path)
 
-trial_num = 10
+trial_num = 1
 num_robots = 3
 ta_algo = "SSI"
 sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
-sampling_time_budget = 240 # seconds
+sampling_time_budget = 1800 # seconds (30 mins)
 
 cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
             'trial_num:='+str(trial_num),
@@ -29,8 +29,6 @@ cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compact
             ]
 roslaunch_args = cli_args[1:]
 roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]
-
-# uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
 
 parent = ROSLaunchParent("run_trials", roslaunch_file, is_core=True)     # run_id can be any string
 parent.start()
