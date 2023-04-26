@@ -73,6 +73,8 @@ class Coordinator:
         # Set random seed for reproducibility
         random.seed(trial_num)
 
+        self.tasks = []
+
         self.num_robots = num_robots
         self.ta_algo = ta_algo
         self.sampling_algo = sampling_algo
@@ -145,8 +147,6 @@ class Coordinator:
 
         self.numSamples = 0
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
-
-        self.tasks = []
 
 
         # If task allocation algorithm is 'dynamic', partition the environment into a grid,
