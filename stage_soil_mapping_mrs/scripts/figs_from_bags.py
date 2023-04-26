@@ -27,6 +27,9 @@ for path in os.listdir(bag_folder_path):
 for bag_path in bag_paths:
     bag = rosbag.Bag(bag_path)
 
+    kriging_img_path = bag_path[:-4] + "_kriging_interpolation.png"
+    variance_img_path = bag_path[:-4] + "_kriging_variance.png"
+
     # Get timestamp of '/sim_time_initialized' message
     for topic, msg, t in bag.read_messages():
         if 'sim_initialized' in topic:
@@ -109,28 +112,41 @@ for bag_path in bag_paths:
     print("Number of kriging interpolations: " + str(len(kriging_interpolations)))
     print("Kriging interpolations:\n" + str(kriging_interpolations))
 
-    # plot the trajectories of multiple robots in randomly generated colors
-    for robot_name, data in robots.items():
-        color = data['color']
-        plt.plot(data['x'], data['y'], color=color, label=robot_name)
-        plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
-        plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
-        plt.imshow(kriging_interpolations[-1]['interpolation'], cmap='gray')
+    # Skip plotting if the image already exists
+    if not os.path.exists(kriging_img_path):        
+        # plot the trajectories of multiple robots in randomly generated colors
+        for robot_name, data in robots.items():
+            color = data['color']
+            try:
+                plt.plot(data['x'], data['y'], color=color, label=robot_name)
+                plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
+                plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
+                plt.imshow(kriging_interpolations[-1]['interpolation'], cmap='gray')
+            except KeyError:
+                print("No samples for robot: " + robot_name)
+            except IndexError:
+                print("No kriging interpolation for robot: " + robot_name)
 
-    plt.colorbar()
-    plt.legend()
-    plt.show()
-    plt.close()
+        plt.colorbar()
+        plt.legend()
+        plt.savefig(kriging_img_path)
+        plt.close()
 
-    # Repeat but with kriging variance
-    for robot_name, data in robots.items():
-        color = data['color']
-        plt.plot(data['x'], data['y'], color=color, label=robot_name)
-        plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
-        plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
-        plt.imshow(kriging_variances[-1]['variance'], cmap='gray')
+    if not os.path.exists(variance_img_path):
+        # Repeat but with kriging variance
+        for robot_name, data in robots.items():
+            color = data['color']
+            try:
+                plt.plot(data['x'], data['y'], color=color, label=robot_name)
+                plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
+                plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
+                plt.imshow(kriging_variances[-1]['variance'], cmap='gray')
+            except KeyError:
+                pass
+            except IndexError:
+                pass
 
-    plt.colorbar()
-    plt.legend()
-    plt.show()
-    plt.close()
+        plt.colorbar()
+        plt.legend()
+        plt.savefig(variance_img_path)
+        plt.close()
