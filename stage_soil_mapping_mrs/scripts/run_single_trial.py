@@ -10,9 +10,9 @@ package_path = rospack.get_path('stage_soil_mapping_mrs')
 
 print(package_path)
 
-trial_num = 1
+trial_num = 10
 num_robots = 3
-ta_algo = "RR"
+ta_algo = "SSI"
 sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
 sampling_time_budget = 240 # seconds
