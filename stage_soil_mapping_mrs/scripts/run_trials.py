@@ -40,7 +40,7 @@ print("Set of environment cropping factors: ", env_crop_factor_set)
 # Create all combinations of trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor
 combinations = list(itertools.product(trial_num_set, num_robots_set, ta_algo_set, sampling_algo_set, env_crop_factor_set))
 # Remove combinations that have no trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor
-combinations = [i for i in combinations if i[0] != i[1] != i[2] != i[3] != i[4]]
+combinations = [i for i in combinations if i[0] != i[2] != i[3] != i[4]]
 total_trials = len(combinations)
 
 print("\nRunning " + str(total_trials) + " simulated trials:\n", combinations)
