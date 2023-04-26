@@ -8,7 +8,6 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from rospkg import RosPack
-from nav_msgs.msg import OccupancyGrid
 
 random.seed(0)
 
