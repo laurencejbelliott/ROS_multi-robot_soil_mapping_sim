@@ -15,7 +15,7 @@ num_robots = 3
 ta_algo = "SSI"
 sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
-sampling_time_budget = 1600 # seconds (30 mins)
+sampling_time_budget = 999999 # seconds
 
 cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
             'trial_num:='+str(trial_num),

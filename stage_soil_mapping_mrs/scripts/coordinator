@@ -28,8 +28,6 @@ matplotlib.use('Agg')
 
 # TODO:
 # - Implement remaining features from Mesa simulation:
-#  * Bespoke dynamic sampling (as in Mesa simulation)
-# - Extend run_trials script to automate launching multiple trials
 # - Environment cropping
 # - Visualise sampling points in RViz
 # - Integrate one or two more sophisticated task allocation algorithm
@@ -112,6 +110,7 @@ class Coordinator:
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
         self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
         self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True)
+        self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
 
         self.allocated_course_cells = []
         self.ds_grid_mean_kriging_variance = {}
@@ -152,7 +151,7 @@ class Coordinator:
         # If task allocation algorithm is 'dynamic', partition the environment into a grid,
         # this is used to address oversampling in the dynamic sampling algorithm
         if 'dynamic' in str(self.sampling_algo).lower():
-            ds_grid_resolution = 10 # metres
+            ds_grid_resolution = 50 # metres
             ds_grid_x = np.arange(0, env_width, ds_grid_resolution)
             ds_grid_y = np.arange(0, env_height, ds_grid_resolution)
             self.ds_grid_x = ds_grid_x
@@ -545,6 +544,12 @@ class Coordinator:
                 rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
                 self.publish_ta(self.ssi_ta())
         self.numSamples += 1
+
+        if self.sampling_algo.lower() == "dynamic":
+            # Check if all cells of the course-grain sampling grid have been sampled
+            if np.all(self.sampled_mask == -1):
+                rospy.loginfo("All cells of the course-grain sampling grid have been sampled. Terminating...")
+                self.sampling_time_budget_elapsed_pub.publish(True)
 
     def metricPubRMSE(self): # Publish Root Mean Squared Error
         self.RMSEpub.publish(self.RMSE)
