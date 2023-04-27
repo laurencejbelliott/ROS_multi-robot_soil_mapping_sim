@@ -28,8 +28,6 @@ matplotlib.use('Agg')
 
 # TODO:
 # - Implement remaining features from Mesa simulation:
-#  * Bespoke dynamic sampling (as in Mesa simulation)
-# - Extend run_trials script to automate launching multiple trials
 # - Environment cropping
 # - Visualise sampling points in RViz
 # - Integrate one or two more sophisticated task allocation algorithm
@@ -64,7 +62,7 @@ id_arr = []
 
 
 class Coordinator:
-    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         
@@ -73,20 +71,31 @@ class Coordinator:
         # Set random seed for reproducibility
         random.seed(trial_num)
 
+        self.tasks = []
+
         self.num_robots = num_robots
         self.ta_algo = ta_algo
         self.sampling_algo = sampling_algo
         self.env_crop_factor = env_crop_factor
+        self.figures_path = figures_path
 
         self.robot_speed = 2.0 # m/s
 
-        # Delete existing figures
-        shutil.rmtree(package_path+'/figures/')
+        # Delete existing figures directory if it exists
+        if os.path.exists(self.figures_path):
+            shutil.rmtree(self.figures_path)
         # Recreate figures directory
-        os.mkdir(package_path+'/figures/')
-        os.mkdir(package_path+'/figures/sampled_cell_masks/')
-        os.mkdir(package_path+'/figures/kriging_variance_masks/')
+        os.mkdir(self.figures_path)
+        os.mkdir(self.figures_path+'/sampled_cell_masks/')
+        os.mkdir(self.figures_path+'/kriging_variance_masks/')
         
+        # Save visualisation of ground truth
+        plt.imshow(ground_truth, origin='lower')
+        plt.colorbar
+        plt.title('Ground Truth Soil Compaction Data (kPa)')
+        plt.xlabel('x (m)')
+        plt.ylabel('y (m)')
+        plt.savefig(self.figures_path+'/ground_truth.png')
 
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
             self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
@@ -103,6 +112,7 @@ class Coordinator:
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
         self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
         self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True)
+        self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
 
         self.allocated_course_cells = []
         self.ds_grid_mean_kriging_variance = {}
@@ -139,13 +149,11 @@ class Coordinator:
         self.numSamples = 0
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
 
-        self.tasks = []
-
 
         # If task allocation algorithm is 'dynamic', partition the environment into a grid,
         # this is used to address oversampling in the dynamic sampling algorithm
         if 'dynamic' in str(self.sampling_algo).lower():
-            ds_grid_resolution = 10 # metres
+            ds_grid_resolution = 50 # metres
             ds_grid_x = np.arange(0, env_width, ds_grid_resolution)
             ds_grid_y = np.arange(0, env_height, ds_grid_resolution)
             self.ds_grid_x = ds_grid_x
@@ -190,8 +198,8 @@ class Coordinator:
             plt.imshow(self.ds_grid_rotated, origin='lower', cmap='jet', interpolation='none')
             plt.colorbar()
 
-            plt.title("Dynamic sampling grid")
-            plt.savefig(package_path+"/figures/ds_grid.png")
+            plt.title("Dynamic Sampling Grid")
+            plt.savefig(self.figures_path+"/ds_grid.png")
             plt.close()
             rospy.loginfo("Dynamic sampling grid saved to {}".format(package_path+"/figures/ds_grid.png"))
                             
@@ -223,8 +231,8 @@ class Coordinator:
         plt.colorbar()
         # Plot X and Y of points.geoms tuples
         plt.plot([p.x for p in points.geoms], [p.y for p in points.geoms], 'ro')
-        plt.title("Ground truth with sampling grid")
-        plt.savefig(package_path+'/figures/ground_truth_and_sampling.png')
+        plt.title("Ground-truth with Sampling Grid")
+        plt.savefig(self.figures_path+'/ground_truth_and_sampling.png')
         rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/figures/ground_truth_and_sampling.png")
         
         # Convert points.geoms into list of tuples and return
@@ -239,7 +247,7 @@ class Coordinator:
         # Plot X and Y of tuples
         plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
         plt.title("Ground truth with initial random sampling")
-        plt.savefig(package_path+'/figures/ground_truth_and_random_sampling.png')
+        plt.savefig(self.figures_path+'/ground_truth_and_random_sampling.png')
         rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/figures/ground_truth_and_random_sampling.png")
 
         return points
@@ -446,6 +454,14 @@ class Coordinator:
         occupancy_grid.info.origin.orientation.z = 0
         occupancy_grid.info.origin.orientation.w = 1
         occupancy_grid.data = numpy_array.flatten().tolist()
+
+        # Cap values at 0 and 98 range for RViz costmap visualisation
+        for i in range(len(occupancy_grid.data)):
+            if occupancy_grid.data[i] < 1:
+                occupancy_grid.data[i] = 1
+            elif occupancy_grid.data[i] > 98:
+                occupancy_grid.data[i] = 98
+
         return occupancy_grid
     
     def random_edge_pose(self):
@@ -488,25 +504,25 @@ class Coordinator:
             self.sampled_mask[self.ds_grid_rotated == cluster_id] = -1
             
             # Save visualisation of sampled cells mask
-            if self.numSamples % 5 == 0: # Save every 5 samples
+            if self.numSamples % 1 == 0: # Save every 1 samples
                 plt.imshow(self.sampled_mask)
-                plt.title("Sampled cells mask")
+                plt.title("Sampled Cells Mask")
                 plt.colorbar()
                 plt.annotate("Min: " + str(np.min(self.sampled_mask)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.max(self.sampled_mask)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-                plt.savefig(package_path+"/figures/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
+                plt.savefig(self.figures_path+"/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
                 plt.close()
 
                 # Save visualisation of kriging variance with sampled cells mask applied
                 variance_masked = self.kriging_variance * self.sampled_mask
                 plt.imshow(variance_masked)
-                plt.title("Kriging variance with sampled cells convolution applied")
+                plt.title("Kriging Variance x Sampled Cells Convolution")
                 plt.colorbar()
                 plt.annotate("Min: " + str(np.min(variance_masked)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.max(variance_masked)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Mean: " + str(np.mean(variance_masked)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Median: " + str(np.median(variance_masked)), (0, 0), (0, -80), xycoords='axes fraction', textcoords='offset points', va='top')
-                plt.savefig(package_path+"/figures/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
+                plt.savefig(self.figures_path+"/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
                 plt.close()
 
         self.metricPubNumSamples()
@@ -531,6 +547,12 @@ class Coordinator:
                 self.publish_ta(self.ssi_ta())
         self.numSamples += 1
 
+        if self.sampling_algo.lower() == "dynamic":
+            # Check if all cells of the course-grain sampling grid have been sampled
+            if np.all(self.sampled_mask == -1):
+                rospy.loginfo("All cells of the course-grain sampling grid have been sampled. Terminating...")
+                self.sampling_time_budget_elapsed_pub.publish(True)
+
     def metricPubRMSE(self): # Publish Root Mean Squared Error
         self.RMSEpub.publish(self.RMSE)
         rospy.loginfo("Root Mean Squared Error: %.2f" % self.RMSE)
@@ -551,8 +573,9 @@ if __name__ == '__main__':
         ta_algo = myargv[3]
         sampling_algo = myargv[4]
         env_crop_factor = int(myargv[5])
+        figures_path = myargv[6]
 
-        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor)
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path)
     else:
         rospy.logerr("No args provided")
         sys.exit(1)
