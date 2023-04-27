@@ -79,11 +79,6 @@ class Coordinator:
         self.env_crop_factor = env_crop_factor
         self.figures_path = figures_path
 
-        # Save visualisation of ground truth
-        plt.imshow(ground_truth)
-        plt.colorbar
-
-
         self.robot_speed = 2.0 # m/s
 
         # Delete existing figures directory if it exists
@@ -94,6 +89,13 @@ class Coordinator:
         os.mkdir(self.figures_path+'/sampled_cell_masks/')
         os.mkdir(self.figures_path+'/kriging_variance_masks/')
         
+        # Save visualisation of ground truth
+        plt.imshow(ground_truth, origin='lower')
+        plt.colorbar
+        plt.title('Ground Truth Soil Compaction Data (kPa)')
+        plt.xlabel('x (m)')
+        plt.ylabel('y (m)')
+        plt.savefig(self.figures_path+'/ground_truth.png')
 
         rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
             self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))

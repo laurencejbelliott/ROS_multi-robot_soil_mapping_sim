@@ -104,7 +104,7 @@ for robot_name, data in robots.items():
     plt.plot(data['x'], data['y'], color=color, label=robot_name)
     plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
     plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
-    plt.imshow(kriging_interpolations[-1]['interpolation'], cmap='gray')
+    plt.imshow(kriging_interpolations[-1]['interpolation'], cmap='gray', origin='lower')
 
 plt.colorbar()
 plt.legend()
@@ -117,7 +117,7 @@ for robot_name, data in robots.items():
     plt.plot(data['x'], data['y'], color=color, label=robot_name)
     plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
     plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
-    plt.imshow(kriging_variances[-1]['variance'], cmap='gray')
+    plt.imshow(kriging_variances[-1]['variance'], cmap='gray', origin='lower')
 
 plt.colorbar()
 plt.legend()
