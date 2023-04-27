@@ -298,7 +298,7 @@ class Coordinator:
 
 
 
-    def calculate_path_cost(self, robot_position, task_position):
+    def calculate_path_cost(self, robot_id, robot_position, task_position):
         # Calculate path cost
         # Euclidean distance between robot and task, multiplied by constant robot_speed
         return np.sqrt((robot_position[0] - task_position[0]) ** 2 + (robot_position[1] - task_position[1]) ** 2) * self.robot_speed
@@ -338,7 +338,7 @@ class Coordinator:
                     robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
 
                     # Calculate path cost for robot to navigate to task
-                    bid = self.calculate_path_cost(robot_position, task)
+                    bid = self.calculate_path_cost(robot_id, robot_position, task)
                     bids.append(bid)
                 
                 rospy.loginfo("\nTask: " + str(task) + ". Bids:")
@@ -354,7 +354,7 @@ class Coordinator:
 
         # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
         for robot in self.robots:
-            sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+            sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_id, robot_position, x))
             ta[robot] = sorted_tasks
 
         return ta
