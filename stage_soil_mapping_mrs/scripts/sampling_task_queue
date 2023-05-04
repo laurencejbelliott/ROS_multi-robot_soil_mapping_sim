@@ -9,6 +9,7 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String, Float32MultiArray
 from geometry_msgs.msg import Pose
 from nav_msgs.msg import Odometry
+from stage_soil_mapping_mrs.msg import InsertTask
 # TODO: Add rospy_message_converter to rosdep dependencies
 from rospy_message_converter import message_converter
 import numpy as np
@@ -73,6 +74,27 @@ def queue_nav_goal_callback(data):
             rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
 
 
+def insert_nav_goal_callback(data):
+    index = data.index
+    goal = data.goal
+
+    rospy.loginfo("New goal received: " + str(goal.target_pose.pose.position.x) + "," +
+                    str(goal.target_pose.pose.position.y) + " at index " + str(index))
+    
+    goal_queue.insert(index, goal)
+
+    # Human-readable goal queue
+    goal_queue_hr = []
+    for goal in goal_queue:
+        goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+
+    if len(goal_queue) > 0:
+        goal_queue_pub.publish(str(goal_queue_hr))
+        rospy.loginfo("\nNav goal queue:")
+        for g in range(len(goal_queue)):
+            rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
+
+
 def pub_mock_pen_reading(goal):
     # If nav. was successful, stop for 5 seconds and read data indexed by position
     rospy.loginfo("Taking penetrometer reading...")
@@ -97,6 +119,7 @@ def pub_mock_pen_reading(goal):
 
 def queue_nav_goal_listener():
     rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
+    rospy.Subscriber(namespace+node_name+'/insert_goal', InsertTask, insert_nav_goal_callback)
 
     r = rospy.Rate(1)
     while not rospy.is_shutdown():
