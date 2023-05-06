@@ -22,6 +22,7 @@ from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal
+from stage_soil_mapping_mrs.msg import InsertTask
 from shapely.geometry import MultiPoint
 import matplotlib
 matplotlib.use('Agg')
@@ -208,10 +209,24 @@ class Coordinator:
         self.robots = ["robot_" + str(r) for r in range(self.num_robots)]
         self.robot_pose_pubs = {}
         self.robot_intial_poses = {}
+        self.robot_task_queue_subs = {}
+        self.robot_task_queues = {}
+
         for robot in self.robots:
             self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
+            self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
 
         rospy.loginfo("Robots: " + str(self.robots))
+
+
+    def robot_task_queue_callback(self, msg, robot):
+
+        # Parse json data
+        data = msg.data
+        data = data.replace("'", '"')
+        data = json.loads(data)
+
+        self.robot_task_queues[robot] = data
 
     
     def sim_time_factor_callback(self, msg):
@@ -301,8 +316,23 @@ class Coordinator:
     def calculate_path_cost(self, robot_position, task_position):
         # Calculate path cost
         # Euclidean distance between robot and task, multiplied by constant robot_speed
+
+        # Handle task where insertion index is given as well as position
+        if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
+            if len(task_position[0]) == 2:
+                task_position = task_position[0]
+
+        rospy.loginfo("Calculating path cost between " + str(robot_position) + " and " + str(task_position))
         return np.sqrt((robot_position[0] - task_position[0]) ** 2 + (robot_position[1] - task_position[1]) ** 2) * self.robot_speed
 
+
+    def calculate_task_queue_cost(self, robot_position, task_queue):
+        # Calculate task queue cost
+        # Sum of path costs between robot and each task in task queue
+        total_cost = 0
+        for task in task_queue:
+            total_cost += self.calculate_path_cost(robot_position, task)
+        return total_cost
 
     def rr_ta(self):  # Round Robin Task Allocation
         rospy.loginfo("Executing Round Robin Task Allocation...")
@@ -332,14 +362,28 @@ class Coordinator:
             if len(self.tasks) > 0:
                 task = self.tasks.pop(0)
                 bids = []
+                min_cost_indices = []
                 for robot in self.robots:
                     # Get robot position
                     robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
                     robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
 
-                    # Calculate path cost for robot to navigate to task
-                    bid = self.calculate_path_cost(robot_position, task)
+                    # Calculate bid as cost of path between robot and all tasks in their task queue, for each possible insertion of the new task
+                    # bid = self.calculate_path_cost(robot_position, task)
+
+                    min_cost = float("inf")
+                    min_cost_index = 0
+                    robot_task_queue = self.robot_task_queues[robot]
+                    for i in range(len(robot_task_queue) + 1):
+                        task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                        cost = self.calculate_task_queue_cost(robot_position, task_queue)
+                        if cost < min_cost:
+                            min_cost = cost
+                            min_cost_index = i
+
+                    bid = min_cost
                     bids.append(bid)
+                    min_cost_indices.append(min_cost_index)
                 
                 rospy.loginfo("\nTask: " + str(task) + ". Bids:")
                 for b in range(len(bids)):
@@ -347,40 +391,74 @@ class Coordinator:
 
                 # Get index of max bid
                 min_bid_index = bids.index(min(bids))
+                insert_index = min_cost_indices[min_bid_index]
 
                 rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
 
-                ta["robot_" + str(min_bid_index)].append(task)
+                ta["robot_" + str(min_bid_index)].append([task, insert_index])
 
         # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
         for robot in self.robots:
-            sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
-            ta[robot] = sorted_tasks
-
+            if len(ta[robot]) > 0 and type(ta[robot][0]) != tuple:
+                rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+                sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+                ta[robot] = sorted_tasks
+            # elif len(ta[robot]) > 0 and type(ta[robot][0]) == tuple:
+            #     rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+            #     sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+            #     ta[robot] = sorted_tasks
         return ta
 
 
     def publish_ta(self, task_allocations):
-        # Publish task allocations to robots
-        for robot in self.robots:
-            new_task_topic = "/" + robot + "/sampling_task_queue/add_goal"
-            new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
-                                        tcp_nodelay=True, latch=True)
-            task_count = 0
-            for task in task_allocations[robot][::-1]:
-                task_goal = MoveBaseGoal()
-                task_goal.target_pose.header.frame_id = "map"
-                task_goal.target_pose.pose.position.x = task[0]
-                task_goal.target_pose.pose.position.y = task[1]
-                task_goal.target_pose.pose.orientation.w = 1.0
-                new_task_pub.publish(task_goal)
-                rospy.loginfo("Publishing task to " + robot + ": " + str(task))
-                # Delay after 1st task to allow robots to start moving
-                if task_count == 0:
-                    rospy.sleep(2)
-                else:
-                    rospy.sleep(0.1)
-                task_count += 1
+        rospy.loginfo("Task allocations: " + str(task_allocations))
+        # If using dynamic sampling, insert tasks using given index, rather than adding them to the end of the queue
+        if self.ta_algo == "SSI" and len(task_allocations[self.robots[0]]) > 0 and type(task_allocations[self.robots[0]][0]) != tuple:
+            # Publish task allocations to robots
+            for robot in self.robots:
+                new_task_topic = "/" + robot + "/sampling_task_queue/insert_goal"
+                new_task_pub = rospy.Publisher(new_task_topic, InsertTask, queue_size=0,
+                                            tcp_nodelay=True, latch=True)
+                task_count = 0
+                for task in task_allocations[robot][::-1]:
+                    task_goal = MoveBaseGoal()
+                    task_goal.target_pose.header.frame_id = "map"
+                    task_goal.target_pose.pose.position.x = task[0][0]
+                    task_goal.target_pose.pose.position.y = task[0][1]
+                    task_goal.target_pose.pose.orientation.w = 1.0
+
+                    insert_task_msg = InsertTask()
+                    insert_task_msg.goal = task_goal
+                    insert_task_msg.index = task[1]
+                    new_task_pub.publish(insert_task_msg)
+                    rospy.loginfo("Publishing task to " + robot + ": " + str(task))
+                    # Delay after 1st task to allow robots to start moving
+                    if task_count == 0:
+                        rospy.sleep(2)
+                    else:
+                        rospy.sleep(0.1)
+                    task_count += 1
+        else:
+            # Publish task allocations to robots
+            for robot in self.robots:
+                new_task_topic = "/" + robot + "/sampling_task_queue/add_goal"
+                new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
+                                            tcp_nodelay=True, latch=True)
+                task_count = 0
+                for task in task_allocations[robot][::-1]:
+                    task_goal = MoveBaseGoal()
+                    task_goal.target_pose.header.frame_id = "map"
+                    task_goal.target_pose.pose.position.x = task[0]
+                    task_goal.target_pose.pose.position.y = task[1]
+                    task_goal.target_pose.pose.orientation.w = 1.0
+                    new_task_pub.publish(task_goal)
+                    rospy.loginfo("Publishing task to " + robot + ": " + str(task))
+                    # Delay after 1st task to allow robots to start moving
+                    if task_count == 0:
+                        rospy.sleep(2)
+                    else:
+                        rospy.sleep(0.1)
+                    task_count += 1
 
     def interpolate_and_visualise(self, data):
         print("New sample data received:")
