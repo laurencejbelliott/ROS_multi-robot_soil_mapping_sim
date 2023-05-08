@@ -14,7 +14,7 @@ random.seed(0)
 # Get path of bag files
 bag_path = RosPack().get_path('stage_soil_mapping_mrs') + '/bags/'
 
-bag = rosbag.Bag(bag_path+'metrics.bag')
+bag = rosbag.Bag(bag_path+'3_robs_RR_dynamic_4.bag')
 
 # Get timestamp of '/sim_time_initialized' message
 for topic, msg, t in bag.read_messages():
@@ -104,7 +104,9 @@ for robot_name, data in robots.items():
     plt.plot(data['x'], data['y'], color=color, label=robot_name)
     plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
     plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
-    plt.imshow(kriging_interpolations[-1]['interpolation'], cmap='gray', origin='lower')
+    interpolation = kriging_interpolations[-1]['interpolation']
+    interpolation = np.fliplr(interpolation)
+    plt.imshow(interpolation, cmap='gray', origin='lower')
 
 plt.colorbar()
 plt.legend()

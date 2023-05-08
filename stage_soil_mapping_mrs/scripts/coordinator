@@ -413,9 +413,9 @@ class Coordinator:
     def publish_ta(self, task_allocations):
         rospy.loginfo("Task allocations: " + str(task_allocations))
         # If using dynamic sampling, insert tasks using given index, rather than adding them to the end of the queue
-        if self.ta_algo == "SSI" and len(task_allocations[self.robots[0]]) > 0 and type(task_allocations[self.robots[0]][0]) != tuple:
-            # Publish task allocations to robots
-            for robot in self.robots:
+        # Publish task allocations to robots
+        for robot in self.robots:
+            if self.ta_algo == "SSI" and len(task_allocations[robot]) > 0 and type(task_allocations[robot][0]) != tuple:
                 new_task_topic = "/" + robot + "/sampling_task_queue/insert_goal"
                 new_task_pub = rospy.Publisher(new_task_topic, InsertTask, queue_size=0,
                                             tcp_nodelay=True, latch=True)
@@ -438,9 +438,7 @@ class Coordinator:
                     else:
                         rospy.sleep(0.1)
                     task_count += 1
-        else:
-            # Publish task allocations to robots
-            for robot in self.robots:
+            else:
                 new_task_topic = "/" + robot + "/sampling_task_queue/add_goal"
                 new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
                                             tcp_nodelay=True, latch=True)

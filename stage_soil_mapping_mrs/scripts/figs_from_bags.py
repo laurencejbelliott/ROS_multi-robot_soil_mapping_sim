@@ -121,7 +121,9 @@ for bag_path in bag_paths:
                 plt.plot(data['x'], data['y'], color=color, label=robot_name)
                 plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
                 plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
-                plt.imshow(kriging_interpolations[-1]['interpolation'], cmap='gray')
+                interpolation = kriging_interpolations[-1]['interpolation']
+                interpolation = np.fliplr(interpolation)
+                plt.imshow(interpolation, cmap='gray', origin='lower')
             except KeyError:
                 print("No samples for robot: " + robot_name)
             except IndexError:
@@ -140,7 +142,7 @@ for bag_path in bag_paths:
                 plt.plot(data['x'], data['y'], color=color, label=robot_name)
                 plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
                 plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
-                plt.imshow(kriging_variances[-1]['variance'], cmap='gray')
+                plt.imshow(kriging_variances[-1]['variance'], cmap='gray', origin='lower')
             except KeyError:
                 pass
             except IndexError:
