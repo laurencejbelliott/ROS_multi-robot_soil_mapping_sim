@@ -122,7 +122,6 @@ for bag_path in bag_paths:
                 plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
                 plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
                 interpolation = kriging_interpolations[-1]['interpolation']
-                interpolation = np.fliplr(interpolation)
                 plt.imshow(interpolation, cmap='gray', origin='lower')
             except KeyError:
                 print("No samples for robot: " + robot_name)

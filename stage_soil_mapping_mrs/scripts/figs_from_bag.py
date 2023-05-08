@@ -101,7 +101,7 @@ print("Kriging interpolations:\n" + str(kriging_interpolations))
 # plot the trajectories of multiple robots in randomly generated colors
 for robot_name, data in robots.items():
     color = data['color']
-    plt.plot(data['x'], data['y'], color=color, label=robot_name)
+    plt.plot(data['x'], data['y'], color=color, label=robot_name)  
     plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
     plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
     interpolation = kriging_interpolations[-1]['interpolation']

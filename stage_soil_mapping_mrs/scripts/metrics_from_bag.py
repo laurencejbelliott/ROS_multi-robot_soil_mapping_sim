@@ -89,9 +89,12 @@ if __name__ == '__main__':
             global_total_task_completion_time += mean_task_completion_time_df.iloc[-1].data
 
 print("Global mean of per-robot metrics:")
-print("Last step total distance: " + str(global_total_distance / len(robot_names)))
-print("Last step mean idle time: " + str(global_total_idle_time / len(robot_names)))
-print("Last step mean of task completion time: " + str(global_total_task_completion_time / len(robot_names)))
+last_step_total_distance = global_total_distance / len(robot_names)
+print("Last step total distance: " + str(last_step_total_distance))
+last_step_mean_idle_time = global_total_idle_time / len(robot_names)
+print("Last step mean idle time: " + str(last_step_mean_idle_time))
+last_step_mean_task_completion_time = global_total_task_completion_time / len(robot_names)
+print("Last step mean of task completion time: " + str(last_step_mean_task_completion_time))
 
 
 # Put last step metrics in a DataFrame
@@ -127,6 +130,15 @@ metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean kriging varian
 num_samples_msg = b.message_by_topic('/coordinator/numSamples')
 num_samples_df = pd.read_csv(num_samples_msg)
 metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Number of samples', 'Robot Name': "NA", 'Value': num_samples_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+# Append last step total distance
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total distance travelled (m)', 'Robot Name': "NA", 'Value': last_step_total_distance}, index=[0])], ignore_index=True)
+
+# Append last step mean idle time
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean idle time (s)', 'Robot Name': "NA", 'Value': last_step_mean_idle_time}, index=[0])], ignore_index=True)
+
+# Append last step mean task completion time
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean task completion time (s)', 'Robot Name': "NA", 'Value': last_step_mean_task_completion_time}, index=[0])], ignore_index=True)
 
 # Save metrics DataFrame to csv
 metrics_df.to_csv(bag_folder_path + "/metrics.csv", index=False)
