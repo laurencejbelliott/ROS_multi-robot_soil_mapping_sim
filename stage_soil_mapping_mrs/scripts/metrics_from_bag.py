@@ -89,7 +89,7 @@ if __name__ == '__main__':
             global_total_task_completion_time += mean_task_completion_time_df.iloc[-1].data
 
 print("Global mean of per-robot metrics:")
-last_step_total_distance = global_total_distance / len(robot_names)
+last_step_total_distance = global_total_distance
 print("Last step total distance: " + str(last_step_total_distance))
 last_step_mean_idle_time = global_total_idle_time / len(robot_names)
 print("Last step mean idle time: " + str(last_step_mean_idle_time))
