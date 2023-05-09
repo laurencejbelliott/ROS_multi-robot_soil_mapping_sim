@@ -91,8 +91,8 @@ if __name__ == '__main__':
 print("Global mean of per-robot metrics:")
 last_step_total_distance = global_total_distance
 print("Last step total distance: " + str(last_step_total_distance))
-last_step_mean_idle_time = global_total_idle_time / len(robot_names)
-print("Last step mean idle time: " + str(last_step_mean_idle_time))
+last_step_total_idle_time = global_total_idle_time
+print("Last step total idle time: " + str(last_step_total_idle_time))
 last_step_mean_task_completion_time = global_total_task_completion_time / len(robot_names)
 print("Last step mean of task completion time: " + str(last_step_mean_task_completion_time))
 
@@ -135,7 +135,7 @@ metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Number of samples',
 metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total distance travelled (m)', 'Robot Name': "NA", 'Value': last_step_total_distance}, index=[0])], ignore_index=True)
 
 # Append last step mean idle time
-metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean idle time (s)', 'Robot Name': "NA", 'Value': last_step_mean_idle_time}, index=[0])], ignore_index=True)
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total idle time (s)', 'Robot Name': "NA", 'Value': last_step_total_idle_time}, index=[0])], ignore_index=True)
 
 # Append last step mean task completion time
 metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean task completion time (s)', 'Robot Name': "NA", 'Value': last_step_mean_task_completion_time}, index=[0])], ignore_index=True)
