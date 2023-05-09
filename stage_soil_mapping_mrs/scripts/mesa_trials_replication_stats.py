@@ -5,6 +5,7 @@ import rospkg
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.stats import ttest_ind
 
 rospack = rospkg.RosPack()
 
@@ -55,7 +56,7 @@ for condition in condition_names:
     # print(condition_df)
 
     # Average across trials
-    print("\n"+condition)
+    # print("\n"+condition)
     condition_avg_df = condition_df.groupby(['Metric']).mean()
     condition_avg_df.to_csv(csv_path + condition + "_avg.csv")
 
@@ -92,7 +93,7 @@ for condition in condition_names:
 
     # Concatenate all trial dataframes into one dataframe
     condition_df = pd.concat(trial_dfs)
-    print(condition_df)
+    # print(condition_df)
 
     # Remove outliers in the 'RMSE' metric using the IQR method
     # https://www.kdnuggets.com/2017/02/removing-outliers-standard-deviation-python.html
@@ -114,7 +115,7 @@ for condition in condition_names:
     condition_df = condition_df[~((condition_df['Metric'] == 'Mean kriging variance') & ((condition_df['Value'] < (q1 - 1.5 * iqr)) | (condition_df['Value'] > (q3 + 1.5 * iqr))))]
 
     # Average across trials
-    print("\n"+condition)
+    # print("\n"+condition)
     condition_avg_df = condition_df.groupby(['Metric']).mean()
     condition_avg_df.to_csv(csv_path + condition + "_avg_no_outliers.csv")
 
@@ -161,9 +162,9 @@ for metric in metrics_dict.keys():
     metrics_dict[metric]['top_conditions'] = [x for _,x in sorted(zip(metrics_dict[metric]['top_values'],metrics_dict[metric]['top_conditions']))]
     metrics_dict[metric]['top_values'] = sorted(metrics_dict[metric]['top_values'])
 
-print("\nBest conditions for each metric:")
-for metric in metrics_dict.keys():
-    print(metric + ": " + str(metrics_dict[metric]['top_conditions']) + " (" + str(metrics_dict[metric]['top_values']) + ")")
+# print("\nBest conditions for each metric:")
+# for metric in metrics_dict.keys():
+#     print(metric + ": " + str(metrics_dict[metric]['top_conditions']) + " (" + str(metrics_dict[metric]['top_values']) + ")")
 
 # # Plot the best conditions for each metric
 # for metric in metrics_dict.keys():
@@ -204,7 +205,69 @@ for metric in metrics_dict.keys():
 
 # TODO: 1-tailed Welch's t-test comparing the best 2 conditions for each metric
 
-# # Concatenate all condition dataframes into one dataframe
-# for condition in metrics_dict['Kriging RMSE (Root Mean Squared Error)']['top_conditions']:
+# Concatenate all condition dataframes into one dataframe
+conditions_trial_dfs = {}
+for condition in condition_names:
+    trial_dfs = []
+    for trial_num in trial_nums:
+        # Get the csv file for the condition
+        csv_file = condition + "_" + str(trial_num) + "_metrics.csv"
+        csv_df = pd.read_csv(csv_path + csv_file)
 
-#     # Get the csv files for the trials in the condition
+        trial_dfs.append(csv_df)
+    conditions_trial_dfs[condition] = trial_dfs
+
+print(conditions_trial_dfs)
+
+# Calculated 1-tailed Welch's t-test comparing the best 2 conditions for each metric
+print("\n1-tailed Welch's t-test comparing the best (minimum scoring) 2 conditions for each metric:")
+for metric in metrics_dict.keys():
+    print("\n" + metric)
+    condition_1_vals = []
+    condition_2_vals = []
+    condition_count = 1
+    condition_1 = metrics_dict[metric]['top_conditions'][0]
+    condition_2 = metrics_dict[metric]['top_conditions'][1]
+    for condition in metrics_dict[metric]['top_conditions']:
+        print("Condition " + str(condition_count) + " " + condition)
+        condition_df = conditions_trial_dfs[condition]
+        condition_vals = []
+        for trial_df in condition_df:
+            condition_vals.append(trial_df.loc[trial_df['Metric'] == metric]['Value'].values[0])
+
+        # Remove trials with outlier RMSE or MKV values using IQR method
+        # https://www.kdnuggets.com/2017/02/removing-outliers-standard-deviation-python.html
+
+        # Calculate IQR
+        q1 = np.percentile(condition_vals, 25)
+        q3 = np.percentile(condition_vals, 75)
+        iqr = q3 - q1
+        # print("IQR: " + str(iqr))
+
+        # Calculate outlier cutoff
+        outlier_cutoff = iqr * 1.5
+        # print("Outlier cutoff: " + str(outlier_cutoff))
+
+        if outlier_cutoff != 0:
+            # Remove outliers
+            condition_vals = [x for x in condition_vals if (q1 - outlier_cutoff) < x < (q3 + outlier_cutoff)]
+            # print("Values: " + str(condition_vals))
+            
+        if condition_count == 1:
+            condition_1_vals = condition_vals
+            print("Values: " + str(condition_1_vals))
+            print("Mean: " + str(np.mean(condition_1_vals)))
+        elif condition_count == 2:
+            condition_2_vals = condition_vals
+            print("Values: " + str(condition_2_vals))
+            print("Mean: " + str(np.mean(condition_2_vals)))
+        condition_count += 1
+    
+    # Calculate 1-tailed Welch's t-test
+    t_stat, p_val = ttest_ind(condition_1_vals, condition_2_vals, equal_var=False)
+    print("t-statistic: " + str(t_stat))
+    print("p-value: " + str(p_val))
+    if t_stat > 0 and p_val < 0.05:
+        print("Condition 1 (" + condition_1 + ") is significantly better than condition 2 (" + condition_2 + ")")
+    else:
+        print("Condition 1 (" + condition_1 + ") is not significantly better than condition 2 (" + condition_2 + ")")
