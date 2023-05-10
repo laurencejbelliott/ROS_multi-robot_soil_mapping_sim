@@ -13,7 +13,7 @@ import copy
 import operator
 import shutil
 import cv2
-from math import sqrt
+from math import sqrt, floor
 from time import sleep
 
 from matplotlib import pyplot as plt
@@ -134,7 +134,9 @@ class Coordinator:
             self.sampled_mask = np.ones((ground_truth.shape[0], ground_truth.shape[1]))
 
         self.interpolated_map_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+        self.interpolated_map_raw_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map_raw", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
         self.kriging_variance_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+        self.kriging_variance_raw_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance_raw", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
 
         # Publish placeholder maps before any data is received
         interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
@@ -154,7 +156,8 @@ class Coordinator:
         # If task allocation algorithm is 'dynamic', partition the environment into a grid,
         # this is used to address oversampling in the dynamic sampling algorithm
         if 'dynamic' in str(self.sampling_algo).lower():
-            ds_grid_resolution = 50 # metres
+            # ds_grid_resolution = 50 # metres
+            ds_grid_resolution = int(floor(sqrt(env_width * env_height) / 8))
             ds_grid_x = np.arange(0, env_width, ds_grid_resolution)
             ds_grid_y = np.arange(0, env_height, ds_grid_resolution)
             self.ds_grid_x = ds_grid_x
@@ -174,13 +177,13 @@ class Coordinator:
                     if ds_grid_x_ix == 0:
                         x_min = 0
                     else:
-                        x_min = ds_grid_x_ix * ds_grid_resolution
+                        x_min = int(floor(ds_grid_x_ix * ds_grid_resolution))
                     if ds_grid_y_ix == 0:
                         y_min = 0
                     else:
-                        y_min = ds_grid_y_ix * ds_grid_resolution
-                    x_max = (ds_grid_x_ix + 1) * ds_grid_resolution
-                    y_max = (ds_grid_y_ix + 1) * ds_grid_resolution
+                        y_min = int(floor(ds_grid_y_ix * ds_grid_resolution))
+                    x_max = int(floor((ds_grid_x_ix + 1) * ds_grid_resolution))
+                    y_max = int(floor((ds_grid_y_ix + 1) * ds_grid_resolution))
 
                     for x in range(x_min, x_max):
                         for y in range(y_min, y_max):
@@ -498,6 +501,13 @@ class Coordinator:
             # Publish interpolation maps
             interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
             kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
+
+            self.interpolated_map_raw_pub.publish(interpolated_map_ros)
+            self.kriging_variance_raw_pub.publish(kriging_variance_ros)
+
+            interpolated_map_ros = self.normalise_occupancy_grid_for_rviz(interpolated_map_ros)
+            kriging_variance_ros = self.normalise_occupancy_grid_for_rviz(kriging_variance_ros)
+
             self.interpolated_map_pub.publish(interpolated_map_ros)
             self.kriging_variance_pub.publish(kriging_variance_ros)
 
@@ -531,6 +541,9 @@ class Coordinator:
         occupancy_grid.info.origin.orientation.w = 1
         occupancy_grid.data = numpy_array.flatten().tolist()
 
+        return occupancy_grid
+    
+    def normalise_occupancy_grid_for_rviz(self, occupancy_grid): # Normalise occupancy grid for visualisation in RViz
         # Cap values at 0 and 98 range for RViz costmap visualisation
         for i in range(len(occupancy_grid.data)):
             if occupancy_grid.data[i] < 1:

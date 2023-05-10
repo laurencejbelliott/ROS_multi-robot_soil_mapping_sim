@@ -267,7 +267,7 @@ for metric in metrics_dict.keys():
     t_stat, p_val = ttest_ind(condition_1_vals, condition_2_vals, equal_var=False)
     print("t-statistic: " + str(t_stat))
     print("p-value: " + str(p_val))
-    if t_stat > 0 and p_val < 0.05:
+    if p_val < 0.05:
         print("Condition 1 (" + condition_1 + ") is significantly better than condition 2 (" + condition_2 + ")")
     else:
         print("Condition 1 (" + condition_1 + ") is not significantly better than condition 2 (" + condition_2 + ")")

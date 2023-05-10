@@ -14,7 +14,7 @@ random.seed(0)
 # Get path of bag files
 bag_path = RosPack().get_path('stage_soil_mapping_mrs') + '/bags/'
 
-bag = rosbag.Bag(bag_path+'3_robs_RR_dynamic_4.bag')
+bag = rosbag.Bag(bag_path+'metrics.bag')
 
 # Get timestamp of '/sim_time_initialized' message
 for topic, msg, t in bag.read_messages():
@@ -63,7 +63,17 @@ for topic, msg, t in bag.read_messages():
         robots[robot_name]['samples_x'].append(x)
         robots[robot_name]['samples_y'].append(y)
 
-    # Get kriging interpolation, converting from OccupancyGrid to numpy array
+    # Get raw kriging interpolation, converting from OccupancyGrid to numpy array
+    if 'interpolated_map_raw' in topic and t > start_time:
+        kriging_interpolation_dict['time'] = t
+        numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
+
+        # Shrink the numpy array back to the original size
+        numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
+
+        kriging_interpolation_dict['interpolation_raw'] = numpy_array
+
+    # Get clipped kriging interpolation (for RViz), converting from OccupancyGrid to numpy array
     if 'interpolated_map' in topic and t > start_time:
         kriging_interpolation_dict['time'] = t
         numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
@@ -73,7 +83,18 @@ for topic, msg, t in bag.read_messages():
 
         kriging_interpolation_dict['interpolation'] = numpy_array
 
-    # Get kriging variance, converting from OccupancyGrid to numpy array
+
+    # Get raw kriging variance, converting from OccupancyGrid to numpy array
+    if 'kriging_variance_raw' in topic and t > start_time:
+        kriging_variance_dict['time'] = t
+        numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
+
+        # Shrink the numpy array back to the original size
+        numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
+
+        kriging_variance_dict['variance_raw'] = numpy_array
+
+    # Get clipped kriging variance (for RViz), converting from OccupancyGrid to numpy array
     if 'kriging_variance' in topic and t > start_time:
         kriging_variance_dict['time'] = t
         numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
@@ -103,11 +124,34 @@ for robot_name, data in robots.items():
     color = data['color']
     plt.plot(data['x'], data['y'], color=color, label=robot_name)  
     plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
-    plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
-    interpolation = kriging_interpolations[-1]['interpolation']
-    interpolation = np.fliplr(interpolation)
-    plt.imshow(interpolation, cmap='gray', origin='lower')
 
+raw_interp_count = 1
+raw_interp_found = False
+while not raw_interp_found:
+    try:
+        interpolation_raw = kriging_interpolations[-raw_interp_count]['interpolation_raw']
+        # interpolation_raw = np.fliplr(interpolation_raw)
+        raw_interp_found = True
+    except KeyError:
+        raw_interp_count += 1
+
+raw_variance_count = 1
+raw_variance_found = False
+while not raw_variance_found:
+    try:
+        variance_raw = kriging_variances[-raw_variance_count]['variance_raw']
+        # variance_raw = np.fliplr(variance_raw)
+        raw_variance_found = True
+    except KeyError:
+        raw_variance_count += 1
+
+interpolation = kriging_interpolations[-1]['interpolation']
+# interpolation = np.fliplr(interpolation)
+
+if np.min(interpolation_raw) == np.max(interpolation_raw):
+    plt.imshow(interpolation, cmap='gray', origin='lower')
+else:
+    plt.imshow(interpolation_raw, cmap='gray', origin='lower')
 plt.colorbar()
 plt.legend()
 plt.show()
@@ -118,10 +162,13 @@ for robot_name, data in robots.items():
     color = data['color']
     plt.plot(data['x'], data['y'], color=color, label=robot_name)
     plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
-    plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
-    plt.imshow(kriging_variances[-1]['variance'], cmap='gray', origin='lower')
 
+if np.min(variance_raw) == np.max(variance_raw):
+    plt.imshow(kriging_variances[-1]['variance'], cmap='gray', origin='lower')
+else:
+    plt.imshow(variance_raw, cmap='gray', origin='lower')
 plt.colorbar()
 plt.legend()
+plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
 plt.show()
 plt.close()
