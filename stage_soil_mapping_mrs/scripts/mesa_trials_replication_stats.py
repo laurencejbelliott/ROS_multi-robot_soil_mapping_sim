@@ -60,6 +60,10 @@ for condition in condition_names:
     condition_avg_df = condition_df.groupby(['Metric']).mean()
     condition_avg_df.to_csv(csv_path + condition + "_avg.csv")
 
+    # STD across trials
+    condition_std_df = condition_df.groupby(['Metric']).std()
+    condition_std_df.to_csv(csv_path + condition + "_std.csv")
+
 # The same again but excluding trials where the RMSE or MKV (Mean Kriging Variance) is an outlier
 condition_avg_df = pd.DataFrame()
 for condition in condition_names:
@@ -118,6 +122,10 @@ for condition in condition_names:
     # print("\n"+condition)
     condition_avg_df = condition_df.groupby(['Metric']).mean()
     condition_avg_df.to_csv(csv_path + condition + "_avg_no_outliers.csv")
+
+    # STD across trials
+    condition_std_df = condition_df.groupby(['Metric']).std()
+    condition_std_df.to_csv(csv_path + condition + "_std_no_outliers.csv")
 
 # Find the best 2 conditions for each metric
 metrics_dict = {
@@ -217,7 +225,7 @@ for condition in condition_names:
         trial_dfs.append(csv_df)
     conditions_trial_dfs[condition] = trial_dfs
 
-print(conditions_trial_dfs)
+# print(conditions_trial_dfs)
 
 # Calculated 1-tailed Welch's t-test comparing the best 2 conditions for each metric
 print("\n1-tailed Welch's t-test comparing the best (minimum scoring) 2 conditions for each metric:")
@@ -257,10 +265,14 @@ for metric in metrics_dict.keys():
             condition_1_vals = condition_vals
             print("Values: " + str(condition_1_vals))
             print("Mean: " + str(np.mean(condition_1_vals)))
+            print("Median: " + str(np.median(condition_1_vals)))
+            print("Std Dev: " + str(np.std(condition_1_vals)))
         elif condition_count == 2:
             condition_2_vals = condition_vals
             print("Values: " + str(condition_2_vals))
             print("Mean: " + str(np.mean(condition_2_vals)))
+            print("Median: " + str(np.median(condition_2_vals)))
+            print("Std Dev: " + str(np.std(condition_2_vals)))
         condition_count += 1
     
     # Calculate 1-tailed Welch's t-test
