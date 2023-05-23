@@ -413,13 +413,13 @@ class Coordinator:
                             robot_tasks_sanitised.append(task_position)
                         robot_tasks_sanitised = np.array(robot_tasks_sanitised)
                         # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
-                        start = perf_counter()
+                        # start = perf_counter()
                         cost = calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
-                        end = perf_counter()
+                        # end = perf_counter()
 
-                        avg_queue_cost_times.append((end - start) * 1000)
+                        # avg_queue_cost_times.append((end - start) * 1000)
 
-                        rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
+                        # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
                         if cost < min_cost:
                             min_cost = cost
                             min_cost_index = i
@@ -454,13 +454,13 @@ class Coordinator:
                     robot_tasks_sanitised.append(task_position)
 
                 # sorted_tasks = sorted(ta[robot], key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
-                start = perf_counter()
+                # start = perf_counter()
                 sorted_tasks = sorted(robot_tasks_sanitised, key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
-                end = perf_counter()
+                # end = perf_counter()
 
-                avg_queue_sort_times.append((end - start) * 1000)
+                # avg_queue_sort_times.append((end - start) * 1000)
 
-                rospy.loginfo("Mean time to sort task queue: " + str(np.mean(avg_queue_sort_times)) + "ms")
+                # rospy.loginfo("Mean time to sort task queue: " + str(np.mean(avg_queue_sort_times)) + "ms")
                 ta[robot] = sorted_tasks
             # elif len(ta[robot]) > 0 and type(ta[robot][0]) == tuple:
             #     rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
