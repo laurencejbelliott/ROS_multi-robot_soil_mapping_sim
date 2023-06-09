@@ -4,7 +4,7 @@
   <param name="/use_sim_time" value="true"/>
   <node name="map_server" pkg="map_server" type="map_server" args="-g $(find stage_soil_mapping_mrs)/stage_config/maps/Compaction_Field.pgm 0.05" respawn="false" />
 
-  <node pkg="stage_ros_add_pose_and_crash" type="stageros" name="stageros" args="$(find stage_soil_mapping_mrs)/stage_config/worlds/10_Rob_Compaction.world" respawn="false">
+  <node pkg="stage_ros_add_pose_and_crash" type="stageros" name="stageros" args="-g $(find stage_soil_mapping_mrs)/stage_config/worlds/10_Rob_Compaction.world" respawn="false">
     <param name="base_watchdog_timeout" value="0.2"/>
     <param name="is_clock_published" value="false"/>
   </node>
