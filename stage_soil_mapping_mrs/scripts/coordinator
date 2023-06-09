@@ -106,6 +106,12 @@ class Coordinator:
 
         self.robot_speed = 2.0 # m/s
 
+        # If root of figures path doesn't exist, create it
+        figures_path_root = self.figures_path.split('/')[:-1]
+        figures_path_root = '/'.join(figures_path_root)
+        if not os.path.exists(figures_path_root):
+            os.mkdir(figures_path_root)
+
         # Delete existing figures directory if it exists
         if os.path.exists(self.figures_path):
             shutil.rmtree(self.figures_path)
