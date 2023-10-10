@@ -62,7 +62,7 @@ id_arr = []
 
 
 class Coordinator:
-    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         
@@ -85,6 +85,8 @@ class Coordinator:
         if os.path.exists(self.figures_path):
             shutil.rmtree(self.figures_path)
         # Recreate figures directory
+        if not os.path.exists(package_path+'/figures/'):
+            os.mkdir(package_path+'/figures/')
         os.mkdir(self.figures_path)
         os.mkdir(self.figures_path+'/sampled_cell_masks/')
         os.mkdir(self.figures_path+'/kriging_variance_masks/')
@@ -575,7 +577,7 @@ if __name__ == '__main__':
         env_crop_factor = int(myargv[5])
         figures_path = myargv[6]
 
-        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path)
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path)
     else:
         rospy.logerr("No args provided")
         sys.exit(1)
