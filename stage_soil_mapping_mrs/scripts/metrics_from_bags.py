@@ -21,25 +21,26 @@ if __name__ == '__main__':
     for bag_path in bag_paths:
         # Read the bag file
         b = bagreader(bag_path)
+        print("Bag: " + bag_path)
 
         # Check topics
         topic_table = b.topic_table
-        print(topic_table)
+        # print(topic_table)
 
         # Get last step kriging RMSE
         rmse_msg = b.message_by_topic('/coordinator/RMSE')
         rmse_df = pd.read_csv(rmse_msg)
-        print("Last step kriging RMSE: " + str(rmse_df.iloc[-1].data))
+        # print("Last step kriging RMSE: " + str(rmse_df.iloc[-1].data))
 
         # Get last step mean kriging variance
         avgVar_msg = b.message_by_topic('/coordinator/avgVar')
         avgVar_df = pd.read_csv(avgVar_msg)
-        print("Last step mean kriging variance: " + str(avgVar_df.iloc[-1].data))
+        # print("Last step mean kriging variance: " + str(avgVar_df.iloc[-1].data))
 
         # Get last number of samples
         num_samples_msg = b.message_by_topic('/coordinator/numSamples')
         num_samples_df = pd.read_csv(num_samples_msg)
-        print("Last step number of samples: " + str(num_samples_df.iloc[-1].data))
+        # print("Last step number of samples: " + str(num_samples_df.iloc[-1].data))
 
         # Get robot names from topic table
         robot_names = []
@@ -50,13 +51,13 @@ if __name__ == '__main__':
 
         # Print per-robot metrics
         for name in robot_names:
-            print(name + " metrics:")
+            # print(name + " metrics:")
 
             try:
                 # Get last step robot total_distance
                 total_distance_msg = b.message_by_topic('/' + name + '/metrics/total_distance')
                 total_distance_df = pd.read_csv(total_distance_msg)
-                print("Last step total distance: " + str(total_distance_df.iloc[-1].data))
+                # print("Last step total distance: " + str(total_distance_df.iloc[-1].data))
             except ValueError:
                 pass
 
@@ -64,7 +65,7 @@ if __name__ == '__main__':
                 # Get last step robot total_idle_time
                 total_idle_time_msg = b.message_by_topic('/' + name + '/metrics/total_idle_time')
                 total_idle_time_df = pd.read_csv(total_idle_time_msg)
-                print("Last step total idle time: " + str(total_idle_time_df.iloc[-1].data))
+                # print("Last step total idle time: " + str(total_idle_time_df.iloc[-1].data))
             except ValueError:
                 pass
 
@@ -72,7 +73,7 @@ if __name__ == '__main__':
                 # Get last step robot mean_task_completion_time
                 mean_task_completion_time_msg = b.message_by_topic('/' + name + '/metrics/mean_task_completion_time')
                 mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
-                print("Last step mean task completion time: " + str(mean_task_completion_time_df.iloc[-1].data))
+                # print("Last step mean task completion time: " + str(mean_task_completion_time_df.iloc[-1].data))
             except ValueError:
                 pass
 
@@ -113,10 +114,10 @@ if __name__ == '__main__':
             except ValueError:
                 pass
 
-        print("Global mean of per-robot metrics:")
-        print("Last step total distance: " + str(global_total_distance / len(robot_names)))
-        print("Last step mean idle time: " + str(global_total_idle_time / len(robot_names)))
-        print("Last step mean of task completion time: " + str(global_total_task_completion_time / len(robot_names)))
+        # print("Global mean of per-robot metrics:")
+        # print("Last step total distance: " + str(global_total_distance / len(robot_names)))
+        # print("Last step mean idle time: " + str(global_total_idle_time / len(robot_names)))
+        # print("Last step mean of task completion time: " + str(global_total_task_completion_time / len(robot_names)))
 
 
         # Put last step metrics in a DataFrame
@@ -147,6 +148,16 @@ if __name__ == '__main__':
             except ValueError:
                 pass
 
+        
+        # print("Global mean of per-robot metrics:")
+        last_step_total_distance = global_total_distance
+        # print("Last step total distance: " + str(last_step_total_distance))
+        last_step_total_idle_time = global_total_idle_time
+        # print("Last step mean idle time: " + str(last_step_total_idle_time))
+        last_step_mean_task_completion_time = global_total_task_completion_time / len(robot_names)
+        # print("Last step mean of task completion time: " + str(last_step_mean_task_completion_time))
+
+        
         # Append last step kriging RMSE
         rmse_msg = b.message_by_topic('/coordinator/RMSE')
         rmse_df = pd.read_csv(rmse_msg)
@@ -161,6 +172,15 @@ if __name__ == '__main__':
         num_samples_msg = b.message_by_topic('/coordinator/numSamples')
         num_samples_df = pd.read_csv(num_samples_msg)
         metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Number of samples', 'Robot Name': "NA", 'Value': num_samples_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+        # Append last step total distance
+        metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total distance travelled (m)', 'Robot Name': "NA", 'Value': last_step_total_distance}, index=[0])], ignore_index=True)
+
+        # Append last step mean idle time
+        metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total idle time (s)', 'Robot Name': "NA", 'Value': last_step_total_idle_time}, index=[0])], ignore_index=True)
+
+        # Append last step mean task completion time
+        metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean task completion time (s)', 'Robot Name': "NA", 'Value': last_step_mean_task_completion_time}, index=[0])], ignore_index=True)
 
         # Save metrics DataFrame to csv
         # Path to save csv with same as the bag file

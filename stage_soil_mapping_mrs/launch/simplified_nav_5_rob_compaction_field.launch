@@ -13,7 +13,7 @@
   <group ns="robot_0">
     <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
     <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
-    args='"robot_0" "stage_ros" 2.0 0.0 0.0'/>
+    args='"robot_0" "stage_ros" 2.0 0.0 0.0 0.0'/>
 
     <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
       <param name="tf_prefix" value="robot_0" />
@@ -33,7 +33,7 @@
   <group ns="robot_1">
     <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
     <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
-    args='"robot_1" "stage_ros" 2.0 0.0 0.0'/>
+    args='"robot_1" "stage_ros" 2.0 0.0 0.0 0.0'/>
 
     <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
       <param name="tf_prefix" value="robot_1" />
@@ -53,7 +53,7 @@
   <group ns="robot_2">
     <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
     <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
-    args='"robot_2" "stage_ros" 2.0 0.0 0.0'/>
+    args='"robot_2" "stage_ros" 2.0 0.0 0.0 0.0'/>
 
     <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
       <param name="tf_prefix" value="robot_2" />
@@ -73,7 +73,7 @@
   <group ns="robot_3">
     <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
     <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
-    args='"robot_3" "stage_ros" 2.0 0.0 0.0'/>
+    args='"robot_3" "stage_ros" 2.0 0.0 0.0 0.0'/>
 
     <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
       <param name="tf_prefix" value="robot_3" />
@@ -93,7 +93,7 @@
   <group ns="robot_4">
     <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
     <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
-    args='"robot_4" "stage_ros" 2.0 0.0 0.0'/>
+    args='"robot_4" "stage_ros" 2.0 0.0 0.0 0.0'/>
 
     <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
       <param name="tf_prefix" value="robot_4" />

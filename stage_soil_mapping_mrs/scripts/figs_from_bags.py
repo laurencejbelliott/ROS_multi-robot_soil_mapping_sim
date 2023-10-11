@@ -77,7 +77,17 @@ for bag_path in bag_paths:
             robots[robot_name]['samples_x'].append(x)
             robots[robot_name]['samples_y'].append(y)
 
-        # Get kriging interpolation, converting from OccupancyGrid to numpy array
+        # Get raw kriging interpolation, converting from OccupancyGrid to numpy array
+        if 'interpolated_map_raw' in topic and t > start_time:
+            kriging_interpolation_dict['time'] = t
+            numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
+
+            # Shrink the numpy array back to the original size
+            numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
+
+            kriging_interpolation_dict['interpolation_raw'] = numpy_array
+        
+        # Get clipped kriging interpolation (for RViz), converting from OccupancyGrid to numpy array
         if 'interpolated_map' in topic and t > start_time:
             kriging_interpolation_dict['time'] = t
             numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
@@ -87,6 +97,16 @@ for bag_path in bag_paths:
 
             kriging_interpolation_dict['interpolation'] = numpy_array
 
+        # Get raw kriging variance, converting from OccupancyGrid to numpy array
+        if 'kriging_variance_raw' in topic and t > start_time:
+            kriging_variance_dict['time'] = t
+            numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
+
+            # Shrink the numpy array back to the original size
+            numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
+
+            kriging_variance_dict['variance_raw'] = numpy_array
+        
         # Get kriging variance, converting from OccupancyGrid to numpy array
         if 'kriging_variance' in topic and t > start_time:
             kriging_variance_dict['time'] = t
@@ -120,15 +140,64 @@ for bag_path in bag_paths:
             try:
                 plt.plot(data['x'], data['y'], color=color, label=robot_name)
                 plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
-                plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
-                plt.imshow(kriging_interpolations[-1]['interpolation'], cmap='gray')
             except KeyError:
                 print("No samples for robot: " + robot_name)
             except IndexError:
                 print("No kriging interpolation for robot: " + robot_name)
 
+        interpolation_raw = None
+        raw_interp_count = 1
+        raw_interp_found = False
+        while not raw_interp_found:
+            print("len(kriging_interpolations): " + str(len(kriging_interpolations)))
+            print("raw_interp_count: " + str(raw_interp_count))
+            try:
+                interpolation_raw = kriging_interpolations[-raw_interp_count]['interpolation_raw']
+                raw_interp_found = True
+            except KeyError:
+                if raw_interp_count == len(kriging_interpolations):
+                    print("No raw kriging interpolation found.")
+                    break
+            except IndexError:
+                if raw_interp_count == len(kriging_interpolations):
+                    print("No raw kriging interpolation found.")
+                    break
+            if raw_interp_count == len(kriging_interpolations):
+                print("No raw kriging interpolation found.")
+                break
+            raw_interp_count += 1
+
+        variance_raw = None
+        raw_variance_count = 1
+        raw_variance_found = False
+        while not raw_variance_found:
+            try:
+                variance_raw = kriging_variances[-raw_variance_count]['variance_raw']
+                # variance_raw = np.fliplr(variance_raw)
+                raw_variance_found = True
+            except KeyError:
+                if raw_variance_count == len(kriging_variances):
+                    print("No raw kriging variance found.")
+                    break
+            except IndexError:
+                if raw_variance_count == len(kriging_variances):
+                    print("No raw kriging variance found.")
+                    break
+            raw_variance_count += 1
+
+        # Plot the kriging interpolation
+        interpolation = kriging_interpolations[-1]['interpolation']
+
+        if interpolation_raw != None:
+            if np.min(interpolation_raw) == np.max(interpolation_raw) and not raw_interp_found:
+                plt.imshow(interpolation, cmap='gray', origin='lower')
+            else:
+                plt.imshow(interpolation_raw, cmap='gray', origin='lower')
+        else:
+            plt.imshow(interpolation, cmap='gray', origin='lower')
         plt.colorbar()
         plt.legend()
+        plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Interpolation')
         plt.savefig(kriging_img_path)
         plt.close()
 
@@ -139,14 +208,21 @@ for bag_path in bag_paths:
             try:
                 plt.plot(data['x'], data['y'], color=color, label=robot_name)
                 plt.scatter(data['samples_x'], data['samples_y'], color=color, marker='x')
-                plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
-                plt.imshow(kriging_variances[-1]['variance'], cmap='gray')
             except KeyError:
                 pass
             except IndexError:
                 pass
-
+        if variance_raw != None:
+            if np.min(variance_raw) == np.max(variance_raw) and not raw_variance_found:
+                plt.imshow(kriging_variances[-1]['variance'], cmap='gray', origin='lower')
+            else:
+                plt.imshow(variance_raw, cmap='gray', origin='lower')
+        else:
+            plt.imshow(kriging_variances[-1]['variance'], cmap='gray', origin='lower')
+        
+        plt.imshow(kriging_variances[-1]['variance'], cmap='gray', origin='lower')
         plt.colorbar()
         plt.legend()
+        plt.title('Robot Trajectories,\nSample Positions,\nand Kriging Variance')
         plt.savefig(variance_img_path)
         plt.close()

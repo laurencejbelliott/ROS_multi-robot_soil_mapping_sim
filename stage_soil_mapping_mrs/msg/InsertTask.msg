@@ -1,0 +1,2 @@
+uint16 index
+move_base_msgs/MoveBaseGoal goal
