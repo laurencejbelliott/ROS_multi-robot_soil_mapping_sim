@@ -247,7 +247,8 @@ class Coordinator:
         self.robot_task_queues = {}
 
         for robot in self.robots:
-            self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
+            # self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
+            self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=1)
             self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
 
         rospy.loginfo("Robots: " + str(self.robots))
