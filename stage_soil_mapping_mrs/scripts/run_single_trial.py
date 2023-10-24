@@ -17,7 +17,7 @@ sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
 sampling_time_budget = 240 # seconds
 
-cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
+cli_args = [package_path+'/launch/mba_sim_'+str(num_robots)+'_rob_compaction_field.launch',
             'trial_num:='+str(trial_num),
             'num_robots:='+str(num_robots),
             'ta_algo:="'+ta_algo+'"',
