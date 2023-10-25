@@ -14,13 +14,13 @@ import operator
 import shutil
 import cv2
 from math import sqrt, floor
-from time import sleep, perf_counter
+from time import sleep
 
 from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
-from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
+from geometry_msgs.msg import Pose, PoseStamped
 from move_base_msgs.msg import MoveBaseGoal
 from stage_soil_mapping_mrs.msg import InsertTask
 from shapely.geometry import MultiPoint
@@ -30,6 +30,8 @@ matplotlib.use('Agg')
 from coordinator_numba_funcs import calculate_path_cost, calculate_task_queue_cost
 
 # TODO:
+# - Bespoke bid function for auction-based TA algos
+# - Implement common bid functions as baseline TA algos to compare against
 # - Environment cropping
 # - Visualise sampling points in RViz
 # - Integrate one or two more sophisticated task allocation algorithm
@@ -243,6 +245,8 @@ class Coordinator:
         self.robots = ["robot_" + str(r) for r in range(self.num_robots)]
         self.robot_pose_pubs = {}
         self.robot_intial_poses = {}
+        self.robot_poses = {}
+        self.robot_pose_subs = {}
         self.robot_task_queue_subs = {}
         self.robot_task_queues = {}
 
@@ -250,6 +254,7 @@ class Coordinator:
             # self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
             self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=1)
             self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
+            self.robot_pose_subs[robot] = rospy.Subscriber("/" + robot + "/robot_pose", PoseStamped, self.robot_pose_callback, callback_args=robot)
 
         rospy.loginfo("Robots: " + str(self.robots))
 
@@ -261,6 +266,10 @@ class Coordinator:
         data = json.loads(data)
 
         self.robot_task_queues[robot] = data
+
+    
+    def robot_pose_callback(self, msg, robot):
+        self.robot_poses[robot] = msg
 
     
     def sim_time_factor_callback(self, msg):
@@ -401,11 +410,12 @@ class Coordinator:
                 min_cost_indices = []
                 for robot in self.robots:
                     # Get robot position
-                    robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
-                    robot_position = (robot_pose_msg.pose.pose.position.x, robot_pose_msg.pose.pose.position.y)
+                    # robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
+                    # robot_pose_msg = rospy.wait_for_message("/" + robot + "/robot_pose", PoseStamped)
+                    robot_pose_msg = self.robot_poses[robot]
+                    robot_position = (robot_pose_msg.pose.position.x, robot_pose_msg.pose.position.y)
 
                     # Calculate bid as cost of path between robot and all tasks in their task queue, for each possible insertion of the new task
-                    # bid = self.calculate_path_cost(robot_position, task)
 
                     min_cost = float("inf")
                     min_cost_index = 0
@@ -852,8 +862,11 @@ if __name__ == '__main__':
     if 'dynamic' in str(coordinator.sampling_algo).lower():
         ta = {}
         for robot in coordinator.robots:
-            robot_pose = rospy.wait_for_message("/"+robot+"/amcl_pose", PoseWithCovarianceStamped)
-            robot_position = (robot_pose.pose.pose.position.x, robot_pose.pose.pose.position.y)
+            rospy.loginfo("Waiting for message on topic /"+robot+"/robot_pose for initial sampling position")
+            # robot_pose = rospy.wait_for_message("/"+robot+"/robot_pose", PoseStamped)
+            robot_pose = coordinator.robot_poses[robot]
+            rospy.loginfo("Initial sampling position for " + robot + ": " + str(robot_pose.pose.position.x) + ", " + str(robot_pose.pose.position.y))
+            robot_position = (robot_pose.pose.position.x, robot_pose.pose.position.y)
 
             ta[robot] = [robot_position]
         coordinator.publish_ta(ta)
