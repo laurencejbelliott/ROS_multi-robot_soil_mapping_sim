@@ -658,8 +658,8 @@ class Coordinator:
             pose.position.y = random.uniform(1, env_height-1)
         
         # # Convert position from stage coordinates to ROS coordinates
-        pose.position.x = pose.position.x - env_width/2
-        pose.position.y = pose.position.y - env_height/2
+        # pose.position.x = pose.position.x - env_width/2
+        # pose.position.y = pose.position.y - env_height/2
 
         pose.orientation.w = 1
 
@@ -788,8 +788,8 @@ if __name__ == '__main__':
             coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
 
             # Convert position from stage coordinates to ROS coordinates
-            pose.position.x = pose.position.x - env_width/2
-            pose.position.y = pose.position.y - env_height/2
+            # pose.position.x = pose.position.x - env_width/2
+            # pose.position.y = pose.position.y - env_height/2
 
             coordinator.robot_pose_pubs[robot].publish(pose)
             # rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
@@ -842,9 +842,9 @@ if __name__ == '__main__':
             pose.position.y = random.uniform(1, env_height-1)
             pose.orientation.w = 1
 
-            # Convert position from stage coordinates to ROS coordinates
-            pose.position.x = pose.position.x - env_width/2
-            pose.position.y = pose.position.y - env_height/2
+            # # Convert position from stage coordinates to ROS coordinates
+            # pose.position.x = pose.position.x - env_width/2
+            # pose.position.y = pose.position.y - env_height/2
 
             coordinator.robot_pose_pubs[robot].publish(pose)
 
