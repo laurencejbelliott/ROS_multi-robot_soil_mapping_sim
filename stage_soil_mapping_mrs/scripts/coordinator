@@ -509,6 +509,8 @@ class Coordinator:
                     if type(task) == np.ndarray and len(task) == 2:
                         task_goal.target_pose.pose.position.x = task[0]
                         task_goal.target_pose.pose.position.y = task[1]
+                        if task_goal.target_pose.pose.orientation.w == 0:
+                            task_goal.target_pose.pose.orientation.w = 1.0
                     else:
                         task_goal.target_pose.pose.position.x = task[0][0]
                         task_goal.target_pose.pose.position.y = task[0][1]
