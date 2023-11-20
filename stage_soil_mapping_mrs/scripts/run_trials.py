@@ -63,7 +63,7 @@ for trial_params in combinations:
 
     print("Running trial ", trial_count, "/", total_trials, ": ", trial_params)
 
-    cli_args = [package_path+'/launch/simplified_nav_'+str(num_robots)+'_rob_compaction_field.launch',
+    cli_args = [package_path+'/launch/mba_sim_'+str(num_robots)+'_rob_compaction_field.launch',
                 'trial_num:='+str(trial_num),
                 'num_robots:='+str(num_robots),
                 'ta_algo:="'+ta_algo+'"',

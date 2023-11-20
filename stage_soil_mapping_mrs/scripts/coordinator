@@ -20,7 +20,7 @@ from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
-from geometry_msgs.msg import Pose, PoseStamped
+from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal
 from stage_soil_mapping_mrs.msg import InsertTask
 from shapely.geometry import MultiPoint
@@ -89,7 +89,7 @@ avg_queue_cost_times = []
 avg_queue_sort_times = []
 
 class Coordinator:
-    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         
@@ -105,6 +105,7 @@ class Coordinator:
         self.sampling_algo = sampling_algo
         self.env_crop_factor = env_crop_factor
         self.figures_path = figures_path
+        self.simulator = simulator
 
         self.robot_speed = 2.0 # m/s
 
@@ -132,8 +133,8 @@ class Coordinator:
         # plt.ylabel('y (m)')
         # plt.savefig(self.figures_path+'/ground_truth.png')
 
-        rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}".format(
-            self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor))
+        rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}, simulator: {}".format(
+            self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor, self.simulator))
         
         self.rr_rob_index = 0
 
@@ -251,8 +252,10 @@ class Coordinator:
         self.robot_task_queues = {}
 
         for robot in self.robots:
-            # self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
-            self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=1)
+            if self.simulator == "stage_ros":
+                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
+            elif self.simulator == "virtual_robots":
+                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=1)
             self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
             self.robot_pose_subs[robot] = rospy.Subscriber("/" + robot + "/robot_pose", PoseStamped, self.robot_pose_callback, callback_args=robot)
 
@@ -410,10 +413,12 @@ class Coordinator:
                 min_cost_indices = []
                 for robot in self.robots:
                     # Get robot position
-                    # robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
-                    # robot_pose_msg = rospy.wait_for_message("/" + robot + "/robot_pose", PoseStamped)
-                    robot_pose_msg = self.robot_poses[robot]
-                    robot_position = (robot_pose_msg.pose.position.x, robot_pose_msg.pose.position.y)
+                    if self.simulator == "stage_ros":
+                        robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
+                        robot_pose_msg = rospy.wait_for_message("/" + robot + "/robot_pose", PoseStamped)
+                    elif simulator == "virtual_robots":
+                        robot_pose_msg = self.robot_poses[robot]
+                        robot_position = (robot_pose_msg.pose.position.x, robot_pose_msg.pose.position.y)
 
                     # Calculate bid as cost of path between robot and all tasks in their task queue, for each possible insertion of the new task
 
@@ -659,9 +664,10 @@ class Coordinator:
             pose.position.x = random.uniform(1, 6)
             pose.position.y = random.uniform(1, env_height-1)
         
-        # # Convert position from stage coordinates to ROS coordinates
-        # pose.position.x = pose.position.x - env_width/2
-        # pose.position.y = pose.position.y - env_height/2
+        if simulator == "stage_ros":
+            # Convert position from stage coordinates to ROS coordinates
+            pose.position.x = pose.position.x - env_width/2
+            pose.position.y = pose.position.y - env_height/2
 
         pose.orientation.w = 1
 
@@ -756,8 +762,9 @@ if __name__ == '__main__':
         sampling_algo = myargv[4]
         env_crop_factor = int(myargv[5])
         figures_path = myargv[6]
+        simulator = myargv[7]
 
-        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path)
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator)
     else:
         rospy.logerr("No args provided")
         sys.exit(1)
@@ -789,9 +796,10 @@ if __name__ == '__main__':
 
             coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
 
-            # Convert position from stage coordinates to ROS coordinates
-            # pose.position.x = pose.position.x - env_width/2
-            # pose.position.y = pose.position.y - env_height/2
+            if simulator == "stage_ros":
+                # Convert position from stage coordinates to ROS coordinates
+                pose.position.x = pose.position.x - env_width/2
+                pose.position.y = pose.position.y - env_height/2
 
             coordinator.robot_pose_pubs[robot].publish(pose)
             # rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
@@ -844,9 +852,10 @@ if __name__ == '__main__':
             pose.position.y = random.uniform(1, env_height-1)
             pose.orientation.w = 1
 
-            # # Convert position from stage coordinates to ROS coordinates
-            # pose.position.x = pose.position.x - env_width/2
-            # pose.position.y = pose.position.y - env_height/2
+            if simulator == "stage_ros":
+                # Convert position from stage coordinates to ROS coordinates
+                pose.position.x = pose.position.x - env_width/2
+                pose.position.y = pose.position.y - env_height/2
 
             coordinator.robot_pose_pubs[robot].publish(pose)
 
@@ -865,10 +874,14 @@ if __name__ == '__main__':
         ta = {}
         for robot in coordinator.robots:
             rospy.loginfo("Waiting for message on topic /"+robot+"/robot_pose for initial sampling position")
-            # robot_pose = rospy.wait_for_message("/"+robot+"/robot_pose", PoseStamped)
-            robot_pose = coordinator.robot_poses[robot]
-            rospy.loginfo("Initial sampling position for " + robot + ": " + str(robot_pose.pose.position.x) + ", " + str(robot_pose.pose.position.y))
-            robot_position = (robot_pose.pose.position.x, robot_pose.pose.position.y)
+            
+            if simulator == "stage_ros":            
+                robot_pose = rospy.wait_for_message("/"+robot+"/amcl_pose", PoseWithCovarianceStamped)
+                robot_position = (robot_pose.pose.pose.position.x, robot_pose.pose.pose.position.y)
+            elif simulator == "virtual_robots":
+                robot_pose = coordinator.robot_poses[robot]
+                rospy.loginfo("Initial sampling position for " + robot + ": " + str(robot_pose.pose.position.x) + ", " + str(robot_pose.pose.position.y))
+                robot_position = (robot_pose.pose.position.x, robot_pose.pose.position.y)
 
             ta[robot] = [robot_position]
         coordinator.publish_ta(ta)
