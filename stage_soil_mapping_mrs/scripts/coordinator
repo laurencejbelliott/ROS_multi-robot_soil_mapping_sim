@@ -45,7 +45,7 @@ with open(package_path+'/include/stage_soil_mapping_mrs/ground_truth/interpolate
 node_name = 'coordinator'
 namespace = rospy.get_namespace()
 
-increased_sim_speed = 10#x faster than real time
+increased_sim_speed = 20#x faster than real time
 env_width = 324 # metres
 env_height = 220 # metres
 robot_init_pose_algorithm = 'random' # 'realistic', 'random edge', 'random edge and robot'. Using 'random' to replicate Mesa trials. Future trials will use 'random edge and robot'
@@ -783,7 +783,7 @@ if __name__ == '__main__':
         rospy.Subscriber(topic, String, coordinator.new_sample_callback)
 
     rospy.loginfo("Waiting for simulation to start before publishing initial poses")
-    sleep(5)
+    sleep(1)
 
     # Set initial robot poses according to the chosen alogrithm
     if robot_init_pose_algorithm == "realistic": # Set robot poses within 5m of the field's gate (Northwestern corner)

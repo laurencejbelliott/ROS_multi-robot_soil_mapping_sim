@@ -4,8 +4,8 @@ import math
 import rospy
 import json
 import numpy as np
-from geometry_msgs.msg import PoseWithCovarianceStamped
-from std_msgs.msg import Float32, String, Float32MultiArray, Bool
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float32, String, Float32MultiArray, Bool, Int16
 
 # Define subscriber message callbacks
 def pose_callback(msg):
@@ -34,8 +34,8 @@ if __name__ == "__main__":
 
     def pose_callback(msg, robot):
         # Get position
-        x = msg.pose.pose.position.x
-        y = msg.pose.pose.position.y
+        x = msg.pose.position.x
+        y = msg.pose.position.y
 
         # Calculate distance travelled
         if len(metrics[robot]["positions"]) > 0:
@@ -57,13 +57,21 @@ if __name__ == "__main__":
         publishers[robot] = {}
         metrics[robot] = {}
         
-        # Total distance travelled
+        # Total distance travelled publisher
         publishers[robot]["total_distance_pub"] = rospy.Publisher(
             "/{}/metrics/total_distance".format(robot), Float32, queue_size=1
         )
 
-        # Subscriber to amcl_pose
-        rospy.Subscriber("/{}/amcl_pose".format(robot), PoseWithCovarianceStamped, pose_callback, robot)
+        # Goal queue length publisher
+        publishers[robot]["goal_queue_length_pub"] = rospy.Publisher(
+            "/{}/metrics/goal_queue_length".format(robot), Int16, queue_size=1
+        )
+
+        # # Subscriber to amcl_pose
+        # rospy.Subscriber("/{}/amcl_pose".format(robot), PoseWithCovarianceStamped, pose_callback, robot)
+
+        # Subscriber to robot_pose
+        rospy.Subscriber("/{}/robot_pose".format(robot), PoseStamped, pose_callback, robot)
 
         rospy.loginfo("Created publisher for /{}/metrics/total_distance".format(robot))
         metrics[robot]["positions"] = []  # List of 2D positions tuple (x, y)
@@ -110,5 +118,8 @@ if __name__ == "__main__":
 
             # Publish total idle time
             publishers[robot]["total_idle_time_pub"].publish(metrics[robot]["total_idle_time"])
+
+            # Publish goal queue length
+            publishers[robot]["goal_queue_length_pub"].publish(len(goal_queue))
 
         rospy.sleep(1 / publish_rate)
