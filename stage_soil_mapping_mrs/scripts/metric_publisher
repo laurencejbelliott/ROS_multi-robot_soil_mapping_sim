@@ -67,6 +67,11 @@ if __name__ == "__main__":
             "/{}/metrics/goal_queue_length".format(robot), Int16, queue_size=1
         )
 
+        # Max goal queue length publisher
+        publishers[robot]["max_task_queue_length_pub"] = rospy.Publisher(
+            "/{}/metrics/max_goal_queue_length".format(robot), Int16, queue_size=1
+        )
+
         # # Subscriber to amcl_pose
         # rospy.Subscriber("/{}/amcl_pose".format(robot), PoseWithCovarianceStamped, pose_callback, robot)
 
@@ -76,6 +81,7 @@ if __name__ == "__main__":
         rospy.loginfo("Created publisher for /{}/metrics/total_distance".format(robot))
         metrics[robot]["positions"] = []  # List of 2D positions tuple (x, y)
         metrics[robot]["total_distance"] = 0
+        metrics[robot]["max_task_queue_len"] = 0
 
         # Total idle time
         publishers[robot]["total_idle_time_pub"] = rospy.Publisher(
@@ -119,7 +125,14 @@ if __name__ == "__main__":
             # Publish total idle time
             publishers[robot]["total_idle_time_pub"].publish(metrics[robot]["total_idle_time"])
 
+            # Calculate max task queue length
+            if len(goal_queue) > metrics[robot]["max_task_queue_len"]:
+                metrics[robot]["max_task_queue_len"] = len(goal_queue)
+            
             # Publish goal queue length
             publishers[robot]["goal_queue_length_pub"].publish(len(goal_queue))
+
+            # Publish max task queue length
+            publishers[robot]["max_task_queue_length_pub"].publish(metrics[robot]["max_task_queue_len"])
 
         rospy.sleep(1 / publish_rate)
