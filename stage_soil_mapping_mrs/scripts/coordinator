@@ -252,12 +252,28 @@ class Coordinator:
         self.robot_task_queue_subs = {}
         self.robot_task_queues = {}
         self.robot_tasks_allocated_count = {}
+        self.robot_ta_fairnesses = {}
         
+        self.robot_tasks_allocated_count_total = 0
+        self.robot_tasks_allocated_count_total_pub = rospy.Publisher(namespace + node_name + "/" + "robot_tasks_allocated_count_total", Int64, queue_size=0, tcp_nodelay=True, latch=True)
+        self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
+
+        self.mean_ta_fairness = -1
+        self.mean_ta_fairness_pub = rospy.Publisher(namespace + node_name + "/" + "mean_ta_fairness", Float64, queue_size=0, tcp_nodelay=True, latch=True)
+        self.mean_ta_fairness_pub.publish(self.mean_ta_fairness)
+
         self.robot_tasks_allocated_count_pubs = {}
+        self.robot_ta_fairness_pubs = {}
         for robot in self.robots:
+            # Tasks allocated publishers
             self.robot_tasks_allocated_count[robot] = 0
-            self.robot_tasks_allocated_count_pubs[robot] = rospy.Publisher("/" + robot + "/coordinator/tasks_allocated_count", Int64, queue_size=1)
+            self.robot_tasks_allocated_count_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/tasks_allocated_count", Int64, queue_size=1)
             self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
+
+            # Task allocation fairness publishers
+            self.robot_ta_fairnesses[robot] = -1
+            self.robot_ta_fairness_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/ta_fairness", Float64, queue_size=1)
+            self.robot_ta_fairness_pubs[robot].publish(self.robot_ta_fairnesses[robot])
 
         for robot in self.robots:
             if self.simulator == "stage_ros":
@@ -540,8 +556,19 @@ class Coordinator:
                     else:
                         rospy.sleep(0.1)
                     task_count += 1
+
+                    # Update task allocation count
                     self.robot_tasks_allocated_count[robot] += 1
+                    self.robot_tasks_allocated_count_total += 1
                     self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
+                    self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
+
+                    # Calculate and publish per-robot and mean task allocation fairness
+                    self.robot_ta_fairnesses[robot] = self.robot_tasks_allocated_count[robot] / self.robot_tasks_allocated_count_total
+                    self.robot_ta_fairness_pubs[robot].publish(self.robot_ta_fairnesses[robot])
+
+                    self.mean_ta_fairness = np.mean(list(self.robot_ta_fairnesses.values()))
+                    self.mean_ta_fairness_pub.publish(self.mean_ta_fairness)
             else:
                 new_task_topic = "/" + robot + "/sampling_task_queue/add_goal"
                 new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
@@ -561,8 +588,12 @@ class Coordinator:
                     else:
                         rospy.sleep(0.1)
                     task_count += 1
+
+                    # Update task allocation count
                     self.robot_tasks_allocated_count[robot] += 1
+                    self.robot_tasks_allocated_count_total += 1
                     self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
+                    self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
 
     def interpolate_and_visualise(self, data):
         # print("New sample data received:")

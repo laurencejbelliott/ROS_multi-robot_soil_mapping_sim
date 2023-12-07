@@ -36,58 +36,82 @@ Panels:
     topic_0_name: /coordinator/RMSE
     topic_0_refresh_rate: 0
     topic_0_type: std_msgs/Float64
-    topic_10_name: /robot_1/metrics/mean_task_completion_time
+    topic_10_name: /robot_0/metrics/total_distance
     topic_10_refresh_rate: 0
     topic_10_type: std_msgs/Float32
-    topic_11_name: /robot_1/metrics/total_distance
+    topic_11_name: /robot_0/metrics/total_idle_time
     topic_11_refresh_rate: 0
     topic_11_type: std_msgs/Float32
-    topic_12_name: /robot_1/metrics/total_idle_time
+    topic_12_name: /robot_1/coordinator/ta_fairness
     topic_12_refresh_rate: 0
-    topic_12_type: std_msgs/Float32
-    topic_13_name: /robot_2/metrics/goal_queue_length
+    topic_12_type: std_msgs/Float64
+    topic_13_name: /robot_1/coordinator/tasks_allocated_count
     topic_13_refresh_rate: 0
-    topic_13_type: std_msgs/Int16
-    topic_14_name: /robot_2/metrics/max_goal_queue_length
+    topic_13_type: std_msgs/Int64
+    topic_14_name: /robot_1/metrics/goal_queue_length
     topic_14_refresh_rate: 0
     topic_14_type: std_msgs/Int16
-    topic_15_name: /robot_2/metrics/mean_task_completion_time
+    topic_15_name: /robot_1/metrics/max_goal_queue_length
     topic_15_refresh_rate: 0
-    topic_15_type: std_msgs/Float32
-    topic_16_name: /robot_2/metrics/total_distance
+    topic_15_type: std_msgs/Int16
+    topic_16_name: /robot_1/metrics/mean_task_completion_time
     topic_16_refresh_rate: 0
     topic_16_type: std_msgs/Float32
-    topic_17_name: /robot_2/metrics/total_idle_time
+    topic_17_name: /robot_1/metrics/total_distance
     topic_17_refresh_rate: 0
     topic_17_type: std_msgs/Float32
+    topic_18_name: /robot_1/metrics/total_idle_time
+    topic_18_refresh_rate: 0
+    topic_18_type: std_msgs/Float32
+    topic_19_name: /robot_2/coordinator/ta_fairness
+    topic_19_refresh_rate: 0
+    topic_19_type: std_msgs/Float64
     topic_1_name: /coordinator/avgVar
     topic_1_refresh_rate: 0
     topic_1_type: std_msgs/Float64
-    topic_2_name: /coordinator/numSamples
+    topic_20_name: /robot_2/coordinator/tasks_allocated_count
+    topic_20_refresh_rate: 0
+    topic_20_type: std_msgs/Int64
+    topic_21_name: /robot_2/metrics/goal_queue_length
+    topic_21_refresh_rate: 0
+    topic_21_type: std_msgs/Int16
+    topic_22_name: /robot_2/metrics/max_goal_queue_length
+    topic_22_refresh_rate: 0
+    topic_22_type: std_msgs/Int16
+    topic_23_name: /robot_2/metrics/mean_task_completion_time
+    topic_23_refresh_rate: 0
+    topic_23_type: std_msgs/Float32
+    topic_24_name: /robot_2/metrics/total_distance
+    topic_24_refresh_rate: 0
+    topic_24_type: std_msgs/Float32
+    topic_25_name: /robot_2/metrics/total_idle_time
+    topic_25_refresh_rate: 0
+    topic_25_type: std_msgs/Float32
+    topic_2_name: /coordinator/mean_ta_fairness
     topic_2_refresh_rate: 0
-    topic_2_type: std_msgs/Int64
-    topic_3_name: /robot_0/metrics/goal_queue_length
+    topic_2_type: std_msgs/Float64
+    topic_3_name: /coordinator/numSamples
     topic_3_refresh_rate: 0
-    topic_3_type: std_msgs/Int16
-    topic_4_name: /robot_0/metrics/max_goal_queue_length
+    topic_3_type: std_msgs/Int64
+    topic_4_name: /coordinator/robot_tasks_allocated_count_total
     topic_4_refresh_rate: 0
-    topic_4_type: std_msgs/Int16
-    topic_5_name: /robot_0/metrics/mean_task_completion_time
+    topic_4_type: std_msgs/Int64
+    topic_5_name: /robot_0/coordinator/ta_fairness
     topic_5_refresh_rate: 0
-    topic_5_type: std_msgs/Float32
-    topic_6_name: /robot_0/metrics/total_distance
+    topic_5_type: std_msgs/Float64
+    topic_6_name: /robot_0/coordinator/tasks_allocated_count
     topic_6_refresh_rate: 0
-    topic_6_type: std_msgs/Float32
-    topic_7_name: /robot_0/metrics/total_idle_time
+    topic_6_type: std_msgs/Int64
+    topic_7_name: /robot_0/metrics/goal_queue_length
     topic_7_refresh_rate: 0
-    topic_7_type: std_msgs/Float32
-    topic_8_name: /robot_1/metrics/goal_queue_length
+    topic_7_type: std_msgs/Int16
+    topic_8_name: /robot_0/metrics/max_goal_queue_length
     topic_8_refresh_rate: 0
     topic_8_type: std_msgs/Int16
-    topic_9_name: /robot_1/metrics/max_goal_queue_length
+    topic_9_name: /robot_0/metrics/mean_task_completion_time
     topic_9_refresh_rate: 0
-    topic_9_type: std_msgs/Int16
-    vertical_table_header: 000000ff0000000000000002000000010000001200000000000000000000000000000000000000043800000012000101000000000000000000000000003cffffffff0000008100000000000000120000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c0000000100000000000003e80000000000
+    topic_9_type: std_msgs/Float32
+    vertical_table_header: 000000ff0000000000000002000000010000001a0000000000000000000000000000000000000006180000001a000101000000000000000000000000003cffffffff00000081000000000000001a0000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c00000001000000000000003c0000000100000000000003e80000000000
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
