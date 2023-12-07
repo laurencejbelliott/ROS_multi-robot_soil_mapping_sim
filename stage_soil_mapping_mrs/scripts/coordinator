@@ -109,6 +109,7 @@ class Coordinator:
 
         self.robot_speed = 2.0 # m/s
 
+
         # If root of figures path doesn't exist, create it
         figures_path_root = self.figures_path.split('/')[:-1]
         figures_path_root = '/'.join(figures_path_root)
@@ -250,6 +251,13 @@ class Coordinator:
         self.robot_pose_subs = {}
         self.robot_task_queue_subs = {}
         self.robot_task_queues = {}
+        self.robot_tasks_allocated_count = {}
+        
+        self.robot_tasks_allocated_count_pubs = {}
+        for robot in self.robots:
+            self.robot_tasks_allocated_count[robot] = 0
+            self.robot_tasks_allocated_count_pubs[robot] = rospy.Publisher("/" + robot + "/coordinator/tasks_allocated_count", Int64, queue_size=1)
+            self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
 
         for robot in self.robots:
             if self.simulator == "stage_ros":
@@ -532,6 +540,8 @@ class Coordinator:
                     else:
                         rospy.sleep(0.1)
                     task_count += 1
+                    self.robot_tasks_allocated_count[robot] += 1
+                    self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
             else:
                 new_task_topic = "/" + robot + "/sampling_task_queue/add_goal"
                 new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
@@ -551,6 +561,8 @@ class Coordinator:
                     else:
                         rospy.sleep(0.1)
                     task_count += 1
+                    self.robot_tasks_allocated_count[robot] += 1
+                    self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
 
     def interpolate_and_visualise(self, data):
         # print("New sample data received:")
