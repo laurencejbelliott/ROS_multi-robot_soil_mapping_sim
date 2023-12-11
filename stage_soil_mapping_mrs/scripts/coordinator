@@ -564,11 +564,13 @@ class Coordinator:
                     self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
 
                     # Calculate and publish per-robot and mean task allocation fairness
-                    self.robot_ta_fairnesses[robot] = self.robot_tasks_allocated_count[robot] / self.robot_tasks_allocated_count_total
+                    equal_ta_proportion = 1 / self.num_robots
+                    self.robot_ta_fairnesses[robot] = 1 - abs(equal_ta_proportion - self.robot_tasks_allocated_count[robot] / self.robot_tasks_allocated_count_total)
                     self.robot_ta_fairness_pubs[robot].publish(self.robot_ta_fairnesses[robot])
 
-                    self.mean_ta_fairness = np.mean(list(self.robot_ta_fairnesses.values()))
-                    self.mean_ta_fairness_pub.publish(self.mean_ta_fairness)
+                    if -1 not in list(self.robot_ta_fairnesses.values()):
+                        self.mean_ta_fairness = np.mean(list(self.robot_ta_fairnesses.values()))
+                        self.mean_ta_fairness_pub.publish(self.mean_ta_fairness)
             else:
                 new_task_topic = "/" + robot + "/sampling_task_queue/add_goal"
                 new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
