@@ -146,8 +146,8 @@ class Coordinator:
 
         self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
         self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
-        self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True)
-        self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True)
+        self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True, queue_size=1)
+        self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True, queue_size=1)
         self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
 
         self.allocated_course_cells = []
@@ -267,19 +267,19 @@ class Coordinator:
         for robot in self.robots:
             # Tasks allocated publishers
             self.robot_tasks_allocated_count[robot] = 0
-            self.robot_tasks_allocated_count_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/tasks_allocated_count", Int64, queue_size=1)
+            self.robot_tasks_allocated_count_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/tasks_allocated_count", Int64, queue_size=0)
             self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
 
             # Task allocation fairness publishers
             self.robot_ta_fairnesses[robot] = -1
-            self.robot_ta_fairness_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/ta_fairness", Float64, queue_size=1)
+            self.robot_ta_fairness_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/ta_fairness", Float64, queue_size=0)
             self.robot_ta_fairness_pubs[robot].publish(self.robot_ta_fairnesses[robot])
 
         for robot in self.robots:
             if self.simulator == "stage_ros":
-                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=1)
+                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=0)
             elif self.simulator == "virtual_robots":
-                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=1)
+                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=0)
             self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
             self.robot_pose_subs[robot] = rospy.Subscriber("/" + robot + "/robot_pose", PoseStamped, self.robot_pose_callback, callback_args=robot)
 
