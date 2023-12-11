@@ -37,12 +37,14 @@ if __name__ == '__main__':
     # Get last step mean TA fairness
     mean_TA_fairness_msg = b.message_by_topic('/coordinator/mean_ta_fairness')
     mean_TA_fairness_df = pd.read_csv(mean_TA_fairness_msg)
-    print("Last step mean TA fairness: " + str(mean_TA_fairness_df.iloc[-1].data))
+    mean_TA_fairness = mean_TA_fairness_df.iloc[-1].data
+    print("Last step mean TA fairness: " + str(mean_TA_fairness))
 
     # Get last step total robot tasks count
     total_robot_tasks_count_msg = b.message_by_topic('/coordinator/robot_tasks_allocated_count_total')
     total_robot_tasks_count_df = pd.read_csv(total_robot_tasks_count_msg)
-    print("Last step total robot tasks count: " + str(total_robot_tasks_count_df.iloc[-1].data))
+    total_robot_tasks_count = total_robot_tasks_count_df.iloc[-1].data
+    print("Last step total robot tasks count: " + str(total_robot_tasks_count))
 
     # Get robot names from topic table
     robot_names = []
@@ -85,10 +87,50 @@ if __name__ == '__main__':
             mean_task_completion_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
         print("Last step mean task completion time: " + str(mean_task_completion_time_df.iloc[-1].data))
 
+        # Get last step robot TA fairness
+        TA_fairness_msg = b.message_by_topic('/' + name + '/coordinator/ta_fairness')
+        try:
+            TA_fairness_df = pd.read_csv(TA_fairness_msg)
+        except:
+            print("No data for " + name + " TA fairness")
+            TA_fairness_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+        print("Last step TA fairness: " + str(TA_fairness_df.iloc[-1].data))
+
+        # Get last step robot tasks count
+        robot_tasks_count_msg = b.message_by_topic('/' + name + '/coordinator/tasks_allocated_count')
+        try:
+            robot_tasks_count_df = pd.read_csv(robot_tasks_count_msg)
+        except:
+            print("No data for " + name + " tasks count")
+            robot_tasks_count_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+        print("Last step tasks count: " + str(robot_tasks_count_df.iloc[-1].data))
+
+        # Get last step robot goal queue length
+        goal_queue_length_msg = b.message_by_topic('/' + name + '/metrics/goal_queue_length')
+        try:
+            goal_queue_length_df = pd.read_csv(goal_queue_length_msg)
+        except:
+            print("No data for " + name + " goal queue length")
+            goal_queue_length_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+        print("Last step goal queue length: " + str(goal_queue_length_df.iloc[-1].data))
+
+        # Get last step robot max goal queue length
+        max_goal_queue_length_msg = b.message_by_topic('/' + name + '/metrics/max_goal_queue_length')
+        try:
+            max_goal_queue_length_df = pd.read_csv(max_goal_queue_length_msg)
+        except:
+            print("No data for " + name + " max goal queue length")
+            max_goal_queue_length_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+        print("Last step max goal queue length: " + str(max_goal_queue_length_df.iloc[-1].data))
+
     # Get global mean of per-robot metrics
     global_total_distance = 0
     global_total_idle_time = 0
     global_total_task_completion_time = 0
+    global_TA_fairness = mean_TA_fairness
+    global_robot_tasks_count = 0
+    global_goal_queue_length = 0
+    global_max_goal_queue_length = 0
 
     for name in robot_names:
         # Get last step robot total_distance
@@ -136,6 +178,67 @@ if __name__ == '__main__':
             print("Ignoring " + name + ", 0 or NaN mean task completion time")
             global_total_task_completion_time += 0
 
+        # Get last step robot TA fairness
+        TA_fairness_msg = b.message_by_topic('/' + name + '/coordinator/ta_fairness')
+        try:
+            TA_fairness_df = pd.read_csv(TA_fairness_msg)
+        except:
+            print("No data for " + name + " TA fairness")
+            TA_fairness_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+
+        # Ignore value if 0 or NaN
+        if TA_fairness_df.iloc[-1].data != 0 or not np.isnan(TA_fairness_df.iloc[-1].data):
+            global_TA_fairness += TA_fairness_df.iloc[-1].data
+        else:
+            print("Ignoring " + name + ", 0 or NaN TA fairness")
+            global_TA_fairness += 0
+
+        # Get last step robot tasks count
+        robot_tasks_count_msg = b.message_by_topic('/' + name + '/coordinator/tasks_allocated_count')
+        try:
+            robot_tasks_count_df = pd.read_csv(robot_tasks_count_msg)
+        except:
+            print("No data for " + name + " tasks count")
+            robot_tasks_count_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+
+        # Ignore value if 0 or NaN
+        if robot_tasks_count_df.iloc[-1].data != 0 or not np.isnan(robot_tasks_count_df.iloc[-1].data):
+            global_robot_tasks_count += robot_tasks_count_df.iloc[-1].data
+        else:
+            print("Ignoring " + name + ", 0 or NaN tasks count")
+            global_robot_tasks_count += 0
+
+        # Get last step robot goal queue length
+        goal_queue_length_msg = b.message_by_topic('/' + name + '/metrics/goal_queue_length')
+        try:
+            goal_queue_length_df = pd.read_csv(goal_queue_length_msg)
+        except:
+            print("No data for " + name + " goal queue length")
+            goal_queue_length_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+
+        # Ignore value if 0 or NaN
+        if goal_queue_length_df.iloc[-1].data != 0 or not np.isnan(goal_queue_length_df.iloc[-1].data):
+            global_goal_queue_length += goal_queue_length_df.iloc[-1].data
+        else:
+            print("Ignoring " + name + ", 0 or NaN goal queue length")
+            global_goal_queue_length += 0
+
+        # Get last step robot max goal queue length
+        max_goal_queue_length_msg = b.message_by_topic('/' + name + '/metrics/max_goal_queue_length')
+        try:
+            max_goal_queue_length_df = pd.read_csv(max_goal_queue_length_msg)
+        except:
+            print("No data for " + name + " max goal queue length")
+            max_goal_queue_length_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
+
+        # Ignore value if 0 or NaN
+        if max_goal_queue_length_df.iloc[-1].data != 0 or not np.isnan(max_goal_queue_length_df.iloc[-1].data):
+            global_max_goal_queue_length += max_goal_queue_length_df.iloc[-1].data
+        else:
+            print("Ignoring " + name + ", 0 or NaN max goal queue length")
+            global_max_goal_queue_length += 0
+
+
 print("Global metrics:")
 last_step_total_distance = global_total_distance
 print("Last step total distance: " + str(last_step_total_distance))
@@ -143,6 +246,8 @@ last_step_total_idle_time = global_total_idle_time
 print("Last step total idle time: " + str(last_step_total_idle_time))
 last_step_mean_task_completion_time = global_total_task_completion_time / len(robot_names)
 print("Last step mean of task completion time: " + str(last_step_mean_task_completion_time))
+print("Last step mean TA fairness: " + str(mean_TA_fairness))
+print("Last step total robot tasks count: " + str(total_robot_tasks_count))
 
 
 # Put last step metrics in a DataFrame
@@ -176,6 +281,42 @@ for name in robot_names:
         print("No data for " + name + " mean task completion time")
         mean_task_completion_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
     metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean task completion time (s)', 'Robot Name': name, 'Value': mean_task_completion_time_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+    # Get last step robot TA fairness
+    TA_fairness_msg = b.message_by_topic('/' + name + '/coordinator/ta_fairness')
+    try:
+        TA_fairness_df = pd.read_csv(TA_fairness_msg)
+    except:
+        print("No data for " + name + " TA fairness")
+        TA_fairness_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
+    metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'TA fairness', 'Robot Name': name, 'Value': TA_fairness_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+    # Get last step robot tasks count
+    robot_tasks_count_msg = b.message_by_topic('/' + name + '/coordinator/tasks_allocated_count')
+    try:
+        robot_tasks_count_df = pd.read_csv(robot_tasks_count_msg)
+    except:
+        print("No data for " + name + " tasks count")
+        robot_tasks_count_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
+    metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Tasks count', 'Robot Name': name, 'Value': robot_tasks_count_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+    # Get last step robot goal queue length
+    goal_queue_length_msg = b.message_by_topic('/' + name + '/metrics/goal_queue_length')
+    try:
+        goal_queue_length_df = pd.read_csv(goal_queue_length_msg)
+    except:
+        print("No data for " + name + " goal queue length")
+        goal_queue_length_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
+    metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Goal queue length', 'Robot Name': name, 'Value': goal_queue_length_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+    # Get last step robot max goal queue length
+    max_goal_queue_length_msg = b.message_by_topic('/' + name + '/metrics/max_goal_queue_length')
+    try:
+        max_goal_queue_length_df = pd.read_csv(max_goal_queue_length_msg)
+    except:
+        print("No data for " + name + " max goal queue length")
+        max_goal_queue_length_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
+    metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Max goal queue length', 'Robot Name': name, 'Value': max_goal_queue_length_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
 # Append last step kriging RMSE
 rmse_msg = b.message_by_topic('/coordinator/RMSE')
