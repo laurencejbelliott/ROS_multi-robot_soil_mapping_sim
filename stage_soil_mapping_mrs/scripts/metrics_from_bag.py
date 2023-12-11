@@ -34,6 +34,16 @@ if __name__ == '__main__':
     num_samples_df = pd.read_csv(num_samples_msg)
     print("Last step number of samples: " + str(num_samples_df.iloc[-1].data))
 
+    # Get last step mean TA fairness
+    mean_TA_fairness_msg = b.message_by_topic('/coordinator/mean_ta_fairness')
+    mean_TA_fairness_df = pd.read_csv(mean_TA_fairness_msg)
+    print("Last step mean TA fairness: " + str(mean_TA_fairness_df.iloc[-1].data))
+
+    # Get last step total robot tasks count
+    total_robot_tasks_count_msg = b.message_by_topic('/coordinator/robot_tasks_allocated_count_total')
+    total_robot_tasks_count_df = pd.read_csv(total_robot_tasks_count_msg)
+    print("Last step total robot tasks count: " + str(total_robot_tasks_count_df.iloc[-1].data))
+
     # Get robot names from topic table
     robot_names = []
     for i in range(len(topic_table)):
@@ -176,6 +186,16 @@ metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Kriging RMSE (Root 
 avgVar_msg = b.message_by_topic('/coordinator/avgVar')
 avgVar_df = pd.read_csv(avgVar_msg)
 metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean kriging variance', 'Robot Name': "NA", 'Value': avgVar_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+# Append last step mean TA fairness
+mean_TA_fairness_msg = b.message_by_topic('/coordinator/mean_ta_fairness')
+mean_TA_fairness_df = pd.read_csv(mean_TA_fairness_msg)
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean TA fairness', 'Robot Name': "NA", 'Value': mean_TA_fairness_df.iloc[-1].data}, index=[0])], ignore_index=True)
+
+# Append last step total robot tasks count
+total_robot_tasks_count_msg = b.message_by_topic('/coordinator/robot_tasks_allocated_count_total')
+total_robot_tasks_count_df = pd.read_csv(total_robot_tasks_count_msg)
+metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total robot tasks count', 'Robot Name': "NA", 'Value': total_robot_tasks_count_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
 # Get number of samples and append to metrics_df
 num_samples_msg = b.message_by_topic('/coordinator/numSamples')
