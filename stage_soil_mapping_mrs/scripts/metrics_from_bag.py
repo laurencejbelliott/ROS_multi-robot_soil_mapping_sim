@@ -41,23 +41,38 @@ if __name__ == '__main__':
             robot_names.append(topic_table.iloc[i].Topics.split("/")[1])
     robot_names = np.unique(robot_names)
 
+    if "coordinator" in robot_names:
+        robot_names = np.delete(robot_names, np.where(robot_names == "coordinator"))
+
     # Print per-robot metrics
     for name in robot_names:
         print(name + " metrics:")
 
         # Get last step robot total_distance
         total_distance_msg = b.message_by_topic('/' + name + '/metrics/total_distance')
-        total_distance_df = pd.read_csv(total_distance_msg)
+        try:
+            total_distance_df = pd.read_csv(total_distance_msg)
+        except:
+            print("No data for " + name + " total distance")
+            total_distance_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
         print("Last step total distance: " + str(total_distance_df.iloc[-1].data))
 
         # Get last step robot total_idle_time
         total_idle_time_msg = b.message_by_topic('/' + name + '/metrics/total_idle_time')
-        total_idle_time_df = pd.read_csv(total_idle_time_msg)
+        try:
+            total_idle_time_df = pd.read_csv(total_idle_time_msg)
+        except:
+            print("No data for " + name + " total idle time")
+            total_idle_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
         print("Last step total idle time: " + str(total_idle_time_df.iloc[-1].data))
 
         # Get last step robot mean_task_completion_time
         mean_task_completion_time_msg = b.message_by_topic('/' + name + '/metrics/mean_task_completion_time')
-        mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
+        try:
+            mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
+        except:
+            print("No data for " + name + " mean task completion time")
+            mean_task_completion_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
         print("Last step mean task completion time: " + str(mean_task_completion_time_df.iloc[-1].data))
 
     # Get global mean of per-robot metrics
@@ -68,27 +83,50 @@ if __name__ == '__main__':
     for name in robot_names:
         # Get last step robot total_distance
         total_distance_msg = b.message_by_topic('/' + name + '/metrics/total_distance')
-        total_distance_df = pd.read_csv(total_distance_msg)
+        
+        try:
+            total_distance_df = pd.read_csv(total_distance_msg)
+        except:
+            print("No data for " + name + " total distance")
+            total_distance_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
 
-        global_total_distance += total_distance_df.iloc[-1].data
+        if total_distance_df.iloc[-1].data == 0 or np.isnan(total_distance_df.iloc[-1].data):
+            print("Ignoring " + name + ", 0 or NaN total distance")
+        else:
+            global_total_distance += total_distance_df.iloc[-1].data
 
         # Get last step robot total_idle_time
         total_idle_time_msg = b.message_by_topic('/' + name + '/metrics/total_idle_time')
-        total_idle_time_df = pd.read_csv(total_idle_time_msg)
+        
+        try:
+            total_idle_time_df = pd.read_csv(total_idle_time_msg)
+        except:
+            print("No data for " + name + " total idle time")
+            total_idle_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
 
         # Ignore value if 0 or NaN
         if total_idle_time_df.iloc[-1].data != 0 or not np.isnan(total_idle_time_df.iloc[-1].data):
             global_total_idle_time += total_idle_time_df.iloc[-1].data
+        else:
+            print("Ignoring " + name + ", 0 or NaN total idle time")
+            global_total_idle_time += 0
 
         # Get last step robot mean_task_completion_time
         mean_task_completion_time_msg = b.message_by_topic('/' + name + '/metrics/mean_task_completion_time')
-        mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
+        try:
+            mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
+        except:
+            print("No data for " + name + " mean task completion time")
+            mean_task_completion_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
 
         # Ignore value if 0 or NaN
         if mean_task_completion_time_df.iloc[-1].data != 0 or not np.isnan(mean_task_completion_time_df.iloc[-1].data):
             global_total_task_completion_time += mean_task_completion_time_df.iloc[-1].data
+        else:
+            print("Ignoring " + name + ", 0 or NaN mean task completion time")
+            global_total_task_completion_time += 0
 
-print("Global mean of per-robot metrics:")
+print("Global metrics:")
 last_step_total_distance = global_total_distance
 print("Last step total distance: " + str(last_step_total_distance))
 last_step_total_idle_time = global_total_idle_time
@@ -103,17 +141,30 @@ metrics_df = pd.DataFrame(columns=['Metric', 'Robot Name', 'Value'])
 for name in robot_names:
     # Get last step robot total_distance
     total_distance_msg = b.message_by_topic('/' + name + '/metrics/total_distance')
-    total_distance_df = pd.read_csv(total_distance_msg)
+    
+    try:
+        total_distance_df = pd.read_csv(total_distance_msg)
+    except:
+        print("No data for " + name + " total distance")
+        total_distance_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
     metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total distance travelled (m)', 'Robot Name': name, 'Value': total_distance_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
     # Get last step robot total_idle_time
     total_idle_time_msg = b.message_by_topic('/' + name + '/metrics/total_idle_time')
-    total_idle_time_df = pd.read_csv(total_idle_time_msg)
+    try:
+        total_idle_time_df = pd.read_csv(total_idle_time_msg)
+    except:
+        print("No data for " + name + " total idle time")
+        total_idle_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
     metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Total idle time (s)', 'Robot Name': name, 'Value': total_idle_time_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
     # Get last step robot mean_task_completion_time
     mean_task_completion_time_msg = b.message_by_topic('/' + name + '/metrics/mean_task_completion_time')
-    mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
+    try:
+        mean_task_completion_time_df = pd.read_csv(mean_task_completion_time_msg)
+    except:
+        print("No data for " + name + " mean task completion time")
+        mean_task_completion_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, 0]])
     metrics_df = pd.concat([metrics_df, pd.DataFrame({'Metric': 'Mean task completion time (s)', 'Robot Name': name, 'Value': mean_task_completion_time_df.iloc[-1].data}, index=[0])], ignore_index=True)
 
 # Append last step kriging RMSE
