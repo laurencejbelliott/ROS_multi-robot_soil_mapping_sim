@@ -20,6 +20,9 @@ env_crop_factor = 1 # Environment cropping is not yet implemented
 sampling_time_budget = 240 # seconds, as in Mesa sim trials
 figures_path = package_path+'/figures/"'
 simulator = "virtual_robots"
+bid_function = "euclidean_distance_with_insertion"
+use_queue_sorting = True
+
 
 # Define sets of parameters to combine
 trial_num_set = set([i for i in range(1, 11)])
@@ -73,7 +76,9 @@ for trial_params in combinations:
                 'bag_name:="'+bag_name+'"',
                 'sampling_time_budget:='+str(sampling_time_budget),
                 'figures_path:='+'"'+figures_path+'"',
-                'simulator:='+simulator
+                'simulator:='+simulator,
+                'bid_function:='+bid_function,
+                'use_queue_sorting:='+str(use_queue_sorting)
                 ]
     roslaunch_args = cli_args[1:]
     roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]

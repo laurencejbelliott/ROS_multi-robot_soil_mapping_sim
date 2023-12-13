@@ -40,7 +40,7 @@
   <node pkg="stage_soil_mapping_mrs" type="metric_publisher" name="metric_publisher" respawn="false" output="screen" />
 
   <node pkg="stage_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen"
-  args='$(arg trial_num) 3 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor) $(arg figures_path) $(arg simulator)'/>
+  args='$(arg trial_num) 3 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor) $(arg figures_path) $(arg simulator) $(arg bid_function) $(arg use_queue_sorting)'/>
   
   <node pkg="stage_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
 

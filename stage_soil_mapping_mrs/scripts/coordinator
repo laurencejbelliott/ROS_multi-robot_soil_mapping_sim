@@ -34,8 +34,9 @@ from coordinator_numba_funcs import calculate_path_cost, calculate_task_queue_co
 # - Implement common bid functions as baseline TA algos to compare against
 # - Environment cropping
 # - Visualise sampling points in RViz
-# - Integrate one or two more sophisticated task allocation algorithm
-# - Dynamic sampling improvements (co-kriging, quadtree environment partitioning, etc.)
+# - Integrate one or two more sophisticated task allocation algorithm*
+# - Dynamic sampling improvements (co-kriging, quadtree environment partitioning, etc.)*
+# * Likely to remain as future work due to scope of the project
 
 rospack = rospkg.RosPack()
 package_path = rospack.get_path('stage_soil_mapping_mrs')
@@ -64,32 +65,12 @@ y_arr = []
 o_arr = []
 id_arr = []
 
-# spec = [
-#     ('trial_num', nb.int64),
-#     ('tasks', nb.typeof([(0.0, 0.0)])),
-#     ('num_robots', nb.int64),
-#     ('ta_algo', nb.types.unicode_type),
-#     ('sampling_algo', nb.types.unicode_type),
-#     ('env_crop_factor', nb.float64),
-#     ('figures_path', nb.types.unicode_type),
-#     ('robot_speed', nb.float64),
-#     ('rr_rob_index', nb.int64),
-#     ('sim_time_factor', nb.float64),
-#     ('sim_time_factor_sub', rospy.Subscriber.class_type.instance_type),
-#     ('sim_time_factor_pub', rospy.Publisher.class_type.instance_type),
-#     ('sim_initialized_pub', rospy.Publisher.class_type.instance_type),
-#     ('sampling_time_budget_elapsed_pub', rospy.Publisher.class_type.instance_type),
-#     ('allocated_course_cells', nb.typeof([(0, 0)])),
-#     ('ds_grid_mean_kriging_variance', nb.typeof({(0, 0): 0.0})),
-#     ('')
-# ]
-
 # Performance profiling variables
 avg_queue_cost_times = []
 avg_queue_sort_times = []
 
 class Coordinator:
-    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         
@@ -108,6 +89,8 @@ class Coordinator:
         self.simulator = simulator
 
         self.robot_speed = 2.0 # m/s
+        self.bid_function = bid_function # "euclidean_distance" or "euclidean_distance_with_insertion"
+        self.sort_tasks = use_queue_sorting # Sort tasks in task queue to minimise distance travelled by robot
 
 
         # If root of figures path doesn't exist, create it
@@ -384,28 +367,6 @@ class Coordinator:
         return points
 
 
-    # def calculate_path_cost(self, robot_position, task_position):
-    #     # Calculate path cost
-    #     # Euclidean distance between robot and task, multiplied by constant robot_speed
-
-    #     # Handle task where insertion index is given as well as position
-    #     if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
-    #         if len(task_position[0]) == 2:
-    #             task_position = task_position[0]
-
-    #     # rospy.loginfo("Calculating path cost between " + str(robot_position) + " and " + str(task_position))
-    #     return np.sqrt((robot_position[0] - task_position[0]) ** 2 + (robot_position[1] - task_position[1]) ** 2) * self.robot_speed
-
-
-    # def calculate_task_queue_cost(self, robot_position, task_queue):
-    #     # Calculate task queue cost
-    #     # Sum of path costs between robot and each task in task queue
-    #     total_cost = 0
-    #     for task in task_queue:
-    #         total_cost += self.calculate_path_cost(robot_position, task)
-    #     return total_cost
-
-
     def rr_ta(self):  # Round Robin Task Allocation
         rospy.loginfo("Executing Round Robin Task Allocation...")
         ta = {}
@@ -445,75 +406,87 @@ class Coordinator:
                         robot_position = (robot_pose_msg.pose.position.x, robot_pose_msg.pose.position.y)
 
                     # Calculate bid as cost of path between robot and all tasks in their task queue, for each possible insertion of the new task
+                    if self.bid_function == "euclidean_distance_with_insertion":
+                        min_cost = float("inf")
+                        min_cost_index = 0
+                        robot_task_queue = self.robot_task_queues[robot]
+                        for i in range(len(robot_task_queue) + 1):
+                            task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
 
-                    min_cost = float("inf")
-                    min_cost_index = 0
-                    robot_task_queue = self.robot_task_queues[robot]
-                    for i in range(len(robot_task_queue) + 1):
-                        task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                            robot_tasks_sanitised = []
+                            for task_position in copy.deepcopy(task_queue):
+                                # Handle task where insertion index is given as well as position
+                                if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
+                                    if len(task_position[0]) == 2:
+                                        task_position = task_position[0]
+                                robot_tasks_sanitised.append(task_position)
+                            robot_tasks_sanitised = np.array(robot_tasks_sanitised)
+                            # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
+                            # start = perf_counter()
+                            cost = calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
+                            # end = perf_counter()
 
-                        robot_tasks_sanitised = []
-                        for task_position in copy.deepcopy(task_queue):
-                            # Handle task where insertion index is given as well as position
-                            if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
-                                if len(task_position[0]) == 2:
-                                    task_position = task_position[0]
-                            robot_tasks_sanitised.append(task_position)
-                        robot_tasks_sanitised = np.array(robot_tasks_sanitised)
-                        # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
-                        # start = perf_counter()
-                        cost = calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
-                        # end = perf_counter()
+                            # avg_queue_cost_times.append((end - start) * 1000)
 
-                        # avg_queue_cost_times.append((end - start) * 1000)
+                            # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
+                            if cost < min_cost:
+                                min_cost = cost
+                                min_cost_index = i
 
-                        # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
-                        if cost < min_cost:
-                            min_cost = cost
-                            min_cost_index = i
-
-                    bid = min_cost
+                        min_cost_indices.append(min_cost_index)
+                        bid = min_cost
+                    # Calculate bid as cost of path between robot and new task (Euclidean distance * robot speed)
+                    elif self.bid_function == "euclidean_distance":
+                        bid = calculate_path_cost(robot_position, task, self.robot_speed)
                     bids.append(bid)
-                    min_cost_indices.append(min_cost_index)
                 
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
                 # for b in range(len(bids)):
                 #     rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
 
-                # Get index of max bid
-                min_bid_index = bids.index(min(bids))
-                insert_index = min_cost_indices[min_bid_index]
+                if self.bid_function == "euclidean_distance_with_insertion":
+                    # Get index of min bid
+                    min_bid_index = bids.index(min(bids))
+                    insert_index = min_cost_indices[min_bid_index]
 
-                # rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
+                    # rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
 
-                ta["robot_" + str(min_bid_index)].append([task, insert_index])
+                    ta["robot_" + str(min_bid_index)].append([task, insert_index])
+                elif self.bid_function == "euclidean_distance":
+                    # Get index of min bid
+                    min_bid_index = bids.index(min(bids))
 
-        # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
-        for robot in self.robots:
-            if len(ta[robot]) > 0 and type(ta[robot][0]) != tuple:
-                # rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+                    # rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
 
-                robot_tasks_sanitised = []
-                for task_position in copy.deepcopy(ta[robot]):
-                    # Handle task where insertion index is given as well as position
-                    if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
-                        if len(task_position[0]) == 2:
-                            task_position = task_position[0]
-                    robot_tasks_sanitised.append(task_position)
+                    ta["robot_" + str(min_bid_index)].append([task, -1])
 
-                # sorted_tasks = sorted(ta[robot], key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
-                # start = perf_counter()
-                sorted_tasks = sorted(robot_tasks_sanitised, key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
-                # end = perf_counter()
+        if self.sort_tasks:
+            # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
+            for robot in self.robots:
+                if len(ta[robot]) > 0 and type(ta[robot][0]) != tuple:
+                    # rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
 
-                # avg_queue_sort_times.append((end - start) * 1000)
+                    robot_tasks_sanitised = []
+                    for task_position in copy.deepcopy(ta[robot]):
+                        # Handle task where insertion index is given as well as position
+                        if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
+                            if len(task_position[0]) == 2:
+                                task_position = task_position[0]
+                        robot_tasks_sanitised.append(task_position)
 
-                # rospy.loginfo("Mean time to sort task queue: " + str(np.mean(avg_queue_sort_times)) + "ms")
-                ta[robot] = sorted_tasks
-            # elif len(ta[robot]) > 0 and type(ta[robot][0]) == tuple:
-            #     rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
-            #     sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
-            #     ta[robot] = sorted_tasks
+                    # sorted_tasks = sorted(ta[robot], key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
+                    # start = perf_counter()
+                    sorted_tasks = sorted(robot_tasks_sanitised, key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
+                    # end = perf_counter()
+
+                    # avg_queue_sort_times.append((end - start) * 1000)
+
+                    # rospy.loginfo("Mean time to sort task queue: " + str(np.mean(avg_queue_sort_times)) + "ms")
+                    ta[robot] = sorted_tasks
+                # elif len(ta[robot]) > 0 and type(ta[robot][0]) == tuple:
+                #     rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+                #     sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+                #     ta[robot] = sorted_tasks
         return ta
 
 
@@ -808,8 +781,10 @@ if __name__ == '__main__':
         env_crop_factor = int(myargv[5])
         figures_path = myargv[6]
         simulator = myargv[7]
+        bid_function = myargv[8]
+        use_queue_sorting = myargv[9]
 
-        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator)
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting)
     else:
         rospy.logerr("No args provided")
         sys.exit(1)

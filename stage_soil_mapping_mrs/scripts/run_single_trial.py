@@ -17,6 +17,8 @@ sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
 sampling_time_budget = 240 # seconds
 simulator = "virtual_robots"
+bid_function = "euclidean_distance"
+use_queue_sorting = False
 
 cli_args = [package_path+'/launch/mba_sim_'+str(num_robots)+'_rob_compaction_field.launch',
             'trial_num:='+str(trial_num),
@@ -27,7 +29,9 @@ cli_args = [package_path+'/launch/mba_sim_'+str(num_robots)+'_rob_compaction_fie
             'bag_name:="metrics"',
             'sampling_time_budget:='+str(sampling_time_budget),
             'figures_path:='+'"'+package_path+'/figures/test_run"',
-            'simulator:='+simulator
+            'simulator:='+simulator,
+            'bid_function:='+bid_function,
+            'use_queue_sorting:='+str(use_queue_sorting)
             ]
 
 roslaunch_args = cli_args[1:]
