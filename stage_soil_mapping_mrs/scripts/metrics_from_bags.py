@@ -10,8 +10,9 @@ from metrics_from_bag import metrics_from_bag
 
 if __name__ == '__main__':
     # Get the path to the bag files folder
-    rp = RosPack()
-    bag_folder_path = rp.get_path('stage_soil_mapping_mrs') + '/bags'
+    # rp = RosPack()
+    # bag_folder_path = rp.get_path('stage_soil_mapping_mrs') + '/bags'
+    bag_folder_path = "."
 
     bag_paths = []
     # Get the path to all .bag files in the folder
