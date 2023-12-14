@@ -66,7 +66,7 @@ for trial_params in combinations:
     use_queue_sorting = trial_params[6]
 
     # Check if trial has already run by checking if rosbag file exists
-    bag_name = str(num_robots)+'_robs_'+str(ta_algo)+'_'+str(sampling_algo)+'_'+str(trial_num)
+    bag_name = str(bid_function)+'_use_queue_sorting_'+str(use_queue_sorting)+'_'+str(trial_num)
     figures_path = package_path+'/figures/'+bag_name
     
     if exists(package_path+'/bags/'+bag_name+'.bag'):
