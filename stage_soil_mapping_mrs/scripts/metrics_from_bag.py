@@ -399,3 +399,5 @@ if __name__ == '__main__':
     bag_folder_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/'
 
     metrics_from_bag(bag_path, bag_folder_path)
+
+    

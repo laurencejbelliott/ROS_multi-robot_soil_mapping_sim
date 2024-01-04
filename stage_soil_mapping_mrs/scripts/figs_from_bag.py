@@ -12,9 +12,9 @@ from rospkg import RosPack
 random.seed(0)
 
 # Get path of bag files
-bag_path = RosPack().get_path('stage_soil_mapping_mrs') + '/bags/'
+bag_path = "."
 
-bag = rosbag.Bag(bag_path+'metrics.bag')
+bag = rosbag.Bag(bag_path+'/euclidean_distance_use_queue_sorting_False_1.bag')
 
 # Get timestamp of '/sim_time_initialized' message
 for topic, msg, t in bag.read_messages():
