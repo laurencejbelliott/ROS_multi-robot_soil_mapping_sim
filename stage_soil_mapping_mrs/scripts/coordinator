@@ -31,10 +31,9 @@ from coordinator_numba_funcs import calculate_path_cost, calculate_task_queue_co
 
 # TODO:
 # - Bespoke bid function for auction-based TA algos
-# - Implement common bid functions as baseline TA algos to compare against
 # - Environment cropping
 # - Visualise sampling points in RViz
-# - Integrate one or two more sophisticated task allocation algorithm*
+# - Integrate one or two more sophisticated task allocation algorithms*
 # - Dynamic sampling improvements (co-kriging, quadtree environment partitioning, etc.)*
 # * Likely to remain as future work due to scope of the project
 
@@ -49,13 +48,13 @@ namespace = rospy.get_namespace()
 increased_sim_speed = 20#x faster than real time
 env_width = 324 # metres
 env_height = 220 # metres
-robot_init_pose_algorithm = 'random' # 'realistic', 'random edge', 'random edge and robot'. Using 'random' to replicate Mesa trials. Future trials will use 'random edge and robot'
+robot_init_pose_algorithm = 'random' # 'realistic', 'random', 'random edge', or 'random edge and robot'. Using 'random' to replicate Mesa trials. Future trials will use 'random edge and robot'
 
 # Define parameters (Explanations are in kriging.py)
 # Use Gaussian variogram model
 variogram = 'gaussian'
 
-# Set kriging grid dimensions to those the environment
+# Set kriging grid dimensions to those of the environment
 x_grid = np.arange(0, ground_truth.shape[1], 1)
 y_grid = np.arange(0, ground_truth.shape[0], 1)
 
@@ -88,6 +87,7 @@ class Coordinator:
         self.figures_path = figures_path
         self.simulator = simulator
 
+        self.drop_low_variance_tasks = True
         self.robot_speed = 2.0 # m/s
         self.bid_function = bid_function # "euclidean_distance" or "euclidean_distance_with_insertion"
         self.sort_tasks = use_queue_sorting # Sort tasks in task queue to minimise distance travelled by robot
@@ -438,13 +438,22 @@ class Coordinator:
                     # Calculate bid as cost of path between robot and new task (Euclidean distance * robot speed)
                     elif self.bid_function == "euclidean_distance":
                         bid = calculate_path_cost(robot_position, task, self.robot_speed)
+
+                    # Calculate bid as Euclidean distance over kriging variance at task position
+                    elif self.bid_function == "distance_over_variance":
+                        # Calculate bid
+                        bid = calculate_path_cost(robot_position, task, self.robot_speed) / self.kriging_variance[int(task[0]), int(task[1])]
+                    # Calculate bid as Euclidean distance over kriging variance at task position, with cheapest-insertion heuristic
+                    elif self.bid_function == "distance_over_variance_with_insertion":
+                        # TODO: Implement DOV bid function w/ cheapest-insertion heuristic
+                        pass                    
                     bids.append(bid)
                 
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
                 # for b in range(len(bids)):
                 #     rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
 
-                if self.bid_function == "euclidean_distance_with_insertion":
+                if self.bid_function == "euclidean_distance_with_insertion" or self.bid_function == "distance_over_variance_with_insertion":
                     # Get index of min bid
                     min_bid_index = bids.index(min(bids))
                     insert_index = min_cost_indices[min_bid_index]
@@ -452,7 +461,7 @@ class Coordinator:
                     # rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
 
                     ta["robot_" + str(min_bid_index)].append([task, insert_index])
-                elif self.bid_function == "euclidean_distance":
+                elif self.bid_function == "euclidean_distance" or self.bid_function == "distance_over_variance":
                     # Get index of min bid
                     min_bid_index = bids.index(min(bids))
 
@@ -514,8 +523,14 @@ class Coordinator:
                         if task_goal.target_pose.pose.orientation.w == 0:
                             task_goal.target_pose.pose.orientation.w = 1.0
                     else:
-                        task_goal.target_pose.pose.position.x = task[0][0]
-                        task_goal.target_pose.pose.position.y = task[0][1]
+                        rospy.loginfo("Task: " + str(task))
+                        rospy.loginfo("Task shape: " + str(np.array(task).shape))
+                        if np.array(task).shape == (1, 2):
+                            task_goal.target_pose.pose.position.x = task[0][0]
+                            task_goal.target_pose.pose.position.y = task[0][1]
+                        elif np.array(task).shape == (2,):
+                            task_goal.target_pose.pose.position.x = task[0]
+                            task_goal.target_pose.pose.position.y = task[1]
                         task_goal.target_pose.pose.orientation.w = 1.0
 
                     insert_task_msg = InsertTask()
@@ -743,6 +758,42 @@ class Coordinator:
                 if np.mean(self.kriging_variance) >= -1:
                     rospy.loginfo("Generating sampling goals with dynamic sampling...")
                     self.tasks += self.dynamic_sampling()
+            
+            if self.drop_low_variance_tasks:
+                # Drop tasks where kriging variance at the task position is less than the median of positive kriging variance values
+                # This is to avoid robots sampling in areas where the kriging variance has become very low
+
+                # Filter to just the positive kriging variance values
+                kriging_variance_positive = self.kriging_variance[self.kriging_variance > 0]
+                
+                # Calculate the median of the positive kriging variance values
+                kriging_variance_median = np.median(kriging_variance_positive)
+                rospy.loginfo("Dropping tasks with kriging variance less than median of positive kriging variance values...")
+                rospy.loginfo("Median positive kriging variance: " + str(kriging_variance_median))
+
+                # Drop tasks where kriging variance is less than the median of positive kriging variance values
+                tasks_to_drop = []
+                for task in self.tasks:
+                    if self.kriging_variance[int(task[0]), int(task[1])] < kriging_variance_median:
+                        tasks_to_drop.append(task)
+                rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks...")
+                rospy.loginfo("Tasks:" + str(self.tasks))
+                rospy.loginfo("Tasks to drop: " + str(tasks_to_drop))
+                
+                # Get indices of tasks to drop
+                tasks_to_drop_indices = []
+                tasks_as_strings = []
+                for task in self.tasks:
+                    tasks_as_strings.append(str(task))
+
+                for task in tasks_to_drop:
+                    tasks_to_drop_indices.append(tasks_as_strings.index(str(task)))
+                
+                self.tasks = np.array(self.tasks)
+
+                self.tasks = np.delete(self.tasks, tasks_to_drop_indices, axis=0)
+                self.tasks = self.tasks.tolist()
+                rospy.loginfo("Remaining tasks: " + str(self.tasks))
             
             if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
                 rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
