@@ -69,7 +69,7 @@ avg_queue_cost_times = []
 avg_queue_sort_times = []
 
 class Coordinator:
-    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         
@@ -87,10 +87,10 @@ class Coordinator:
         self.figures_path = figures_path
         self.simulator = simulator
 
-        self.drop_low_variance_tasks = True
         self.robot_speed = 2.0 # m/s
-        self.bid_function = bid_function # "euclidean_distance" or "euclidean_distance_with_insertion"
+        self.bid_function = bid_function # "euclidean_distance", "euclidean_distance_with_insertion", "distance_over_variance", "distance_over_variance_with_insertion"
         self.sort_tasks = use_queue_sorting # Sort tasks in task queue to minimise distance travelled by robot
+        self.drop_low_variance_tasks = drop_low_variance_tasks # Drop tasks with low kriging variance from task queue
 
 
         # If root of figures path doesn't exist, create it
@@ -850,8 +850,9 @@ if __name__ == '__main__':
         simulator = myargv[7]
         bid_function = myargv[8]
         use_queue_sorting = myargv[9]
+        drop_low_variance_tasks = myargv[10]
 
-        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting)
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks)
     else:
         rospy.logerr("No args provided")
         sys.exit(1)

@@ -19,6 +19,7 @@ sampling_time_budget = 240 # seconds
 simulator = "virtual_robots"
 bid_function = "distance_over_variance_with_insertion"
 use_queue_sorting = False
+drop_low_variance_tasks = True
 
 cli_args = [package_path+'/launch/mba_sim_'+str(num_robots)+'_rob_compaction_field.launch',
             'trial_num:='+str(trial_num),
@@ -31,7 +32,8 @@ cli_args = [package_path+'/launch/mba_sim_'+str(num_robots)+'_rob_compaction_fie
             'figures_path:='+'"'+package_path+'/figures/test_run"',
             'simulator:='+simulator,
             'bid_function:='+bid_function,
-            'use_queue_sorting:='+str(use_queue_sorting)
+            'use_queue_sorting:='+str(use_queue_sorting),
+            'drop_low_variance_tasks:='+str(drop_low_variance_tasks)
             ]
 
 roslaunch_args = cli_args[1:]
