@@ -367,6 +367,13 @@ class Coordinator:
         return points
 
 
+    def calculate_task_queue_cost_DOV(self, robot_position, task_queue, robot_speed):
+        # Calculate cost of task queue as sum of Euclidean distances between each task
+        cost = 0
+        for i in range(len(task_queue) - 1):
+            cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) / self.kriging_variance[int(task_queue[i][0]), int(task_queue[i][1])]
+        return cost
+    
     def rr_ta(self):  # Round Robin Task Allocation
         rospy.loginfo("Executing Round Robin Task Allocation...")
         ta = {}
@@ -445,8 +452,17 @@ class Coordinator:
                         bid = calculate_path_cost(robot_position, task, self.robot_speed) / self.kriging_variance[int(task[0]), int(task[1])]
                     # Calculate bid as Euclidean distance over kriging variance at task position, with cheapest-insertion heuristic
                     elif self.bid_function == "distance_over_variance_with_insertion":
-                        # TODO: Implement DOV bid function w/ cheapest-insertion heuristic
-                        pass                    
+                        min_cost = float("inf")
+                        min_cost_index = 0
+                        robot_task_queue = self.robot_task_queues[robot]
+                        for i in range(len(robot_task_queue) + 1):
+                            task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                            cost = self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
+                            if cost < min_cost:
+                                min_cost = cost
+                                min_cost_index = i
+                        min_cost_indices.append(min_cost_index)
+                        bid = min_cost
                     bids.append(bid)
                 
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
@@ -523,8 +539,8 @@ class Coordinator:
                         if task_goal.target_pose.pose.orientation.w == 0:
                             task_goal.target_pose.pose.orientation.w = 1.0
                     else:
-                        rospy.loginfo("Task: " + str(task))
-                        rospy.loginfo("Task shape: " + str(np.array(task).shape))
+                        # rospy.loginfo("Task: " + str(task))
+                        # rospy.loginfo("Task shape: " + str(np.array(task).shape))
                         if np.array(task).shape == (1, 2):
                             task_goal.target_pose.pose.position.x = task[0][0]
                             task_goal.target_pose.pose.position.y = task[0][1]
