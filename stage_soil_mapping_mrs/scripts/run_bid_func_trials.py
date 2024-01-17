@@ -22,6 +22,7 @@ figures_path = package_path+'/figures/"'
 simulator = "virtual_robots"
 bid_function = "euclidean_distance_with_insertion"
 use_queue_sorting = True
+drop_low_variance_tasks = True
 
 
 # Define sets of parameters to combine
@@ -41,10 +42,12 @@ print("Set of sampling algorithms: ", sampling_algo_set)
 env_crop_factor_set = set([env_crop_factor])
 print("Set of environment cropping factors: ", env_crop_factor_set)
 
-bid_function_set = set(["euclidean_distance", "euclidean_distance_with_insertion"])
+# bid_function_set = set(["euclidean_distance", "euclidean_distance_with_insertion, distance_over_variance_with_insertion"])
+bid_function_set = set(["distance_over_variance_with_insertion"])
 print("Set of bid functions: ", bid_function_set)
 
-use_queue_sorting_set = set([True, False])
+# use_queue_sorting_set = set([True, False])
+use_queue_sorting_set = set([False])
 print("Set of use_queue_sorting states: ", use_queue_sorting_set)
 
 # Create all combinations of trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor
@@ -86,7 +89,8 @@ for trial_params in combinations:
                 'figures_path:='+'"'+figures_path+'"',
                 'simulator:='+simulator,
                 'bid_function:='+bid_function,
-                'use_queue_sorting:='+str(use_queue_sorting)
+                'use_queue_sorting:='+str(use_queue_sorting),
+                'drop_low_variance_tasks:='+str(drop_low_variance_tasks)
                 ]
     roslaunch_args = cli_args[1:]
     roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]

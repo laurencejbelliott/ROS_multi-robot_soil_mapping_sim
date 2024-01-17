@@ -1,17 +1,25 @@
+#!/usr/bin/env python3
+__author__ = "Laurence Roberts-Elliott"
+
 import os
 import pandas as pd
 import numpy as np
+from rospkg import RosPack
 
 # Define the directory where the CSV files are located
-directory = '.'
+# directory = '.'
+rp = RosPack()
+directory = rp.get_path('stage_soil_mapping_mrs') + '/bags'
 
 # Get a list of all CSV files in the directory
 csv_files = [file for file in os.listdir(directory) if file.endswith('.csv')]
 
 # Filter out CSV files that contain the string "means"
 csv_files = [file for file in csv_files if "means" not in file]
+print(csv_files)
 
-conditions = ["euclidean_distance_use_queue_sorting_False", "euclidean_distance_with_insertion_use_queue_sorting_False"]
+# conditions = ["euclidean_distance_use_queue_sorting_False", "euclidean_distance_with_insertion_use_queue_sorting_False"]
+conditions = ["distance_over_variance_with_insertion_use_queue_sorting_False"]
 
 # Filter the list of CSV files to only include those that match the conditions
 csv_files = [file for file in csv_files if any(condition in file for condition in conditions)]
