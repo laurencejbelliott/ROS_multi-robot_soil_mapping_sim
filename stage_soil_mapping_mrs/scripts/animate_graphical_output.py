@@ -32,7 +32,8 @@ def convert_to_gif(path_to_png_files, gif_name, fps=.5, text_filter=None):
         elif text_filter in file_name:
             # print(file_name)
             images.append(imageio.imread(file_name))
-    imageio.mimsave(gif_name, images, fps=fps)
+    imageio.mimsave(gif_name, images, fps=fps, loop=0)
+
     print("GIF saved to: " + gif_name)
 
 
