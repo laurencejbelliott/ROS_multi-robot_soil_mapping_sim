@@ -22,7 +22,7 @@ from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal
-from stage_soil_mapping_mrs.msg import InsertTask
+from stage_soil_mapping_mrs.msg import InsertTask, Map, Row
 from shapely.geometry import MultiPoint
 import matplotlib
 matplotlib.use('Agg')
@@ -152,9 +152,9 @@ class Coordinator:
             self.sampled_mask = np.ones((ground_truth.shape[0], ground_truth.shape[1]))
 
         self.interpolated_map_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
-        self.interpolated_map_raw_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map_raw", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+        self.interpolated_map_raw_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map_raw", Map, queue_size=0, tcp_nodelay=True, latch=True)
         self.kriging_variance_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
-        self.kriging_variance_raw_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance_raw", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+        self.kriging_variance_raw_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance_raw", Map, queue_size=0, tcp_nodelay=True, latch=True)
 
         # Publish placeholder maps before any data is received
         interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
@@ -638,12 +638,22 @@ class Coordinator:
 
             self.interpolated_map, self.kriging_variance = m, v
 
+            # Create Map for raw kriging interpolation data
+            interpolated_map_ros_raw = Map()
+            for row in self.interpolated_map:
+                interpolated_map_ros_raw.row.append(Row(list(row)))
+
+            # Create Map for raw kriging variance data
+            kriging_variance_ros_raw = Map()
+            for row in self.kriging_variance:
+                kriging_variance_ros_raw.row.append(Row(list(row)))
+
+            self.interpolated_map_raw_pub.publish(interpolated_map_ros_raw)
+            self.kriging_variance_raw_pub.publish(kriging_variance_ros_raw)
+
             # Publish interpolation maps
             interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
             kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
-
-            self.interpolated_map_raw_pub.publish(interpolated_map_ros)
-            self.kriging_variance_raw_pub.publish(kriging_variance_ros)
 
             interpolated_map_ros = self.normalise_occupancy_grid_for_rviz(interpolated_map_ros)
             kriging_variance_ros = self.normalise_occupancy_grid_for_rviz(kriging_variance_ros)
@@ -790,7 +800,8 @@ class Coordinator:
                 # Drop tasks where kriging variance is less than the median of positive kriging variance values
                 tasks_to_drop = []
                 for task in self.tasks:
-                    if self.kriging_variance[int(task[0]), int(task[1])] < kriging_variance_median:
+                    # if self.kriging_variance[int(task[0]), int(task[1])] < kriging_variance_median:
+                    if self.kriging_variance[int(task[0]), int(task[1])] < (kriging_variance_median / 2):
                         tasks_to_drop.append(task)
                 rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks...")
                 rospy.loginfo("Tasks:" + str(self.tasks))
