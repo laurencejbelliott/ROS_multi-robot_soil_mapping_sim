@@ -19,7 +19,12 @@ csv_files = [file for file in csv_files if "means" not in file]
 print(csv_files)
 
 # conditions = ["euclidean_distance_use_queue_sorting_False", "euclidean_distance_with_insertion_use_queue_sorting_False"]
-conditions = ["distance_over_variance_with_insertion_use_queue_sorting_False"]
+# conditions = ["distance_over_variance_with_insertion_use_queue_sorting_False"]
+# conditions = ["distance_over_variance_with_insertion_drop_low_var_tasks_half_med_var_True"]
+conditions = [
+    "distance_times_variance_drop_low_var_tasks_True_half_thresh",
+    "distance_times_variance_with_insertion_drop_low_var_tasks_True_half_thresh"
+]
 
 # Filter the list of CSV files to only include those that match the conditions
 csv_files = [file for file in csv_files if any(condition in file for condition in conditions)]

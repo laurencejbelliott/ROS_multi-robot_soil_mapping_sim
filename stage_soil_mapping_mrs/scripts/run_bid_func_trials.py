@@ -42,16 +42,20 @@ print("Set of sampling algorithms: ", sampling_algo_set)
 env_crop_factor_set = set([env_crop_factor])
 print("Set of environment cropping factors: ", env_crop_factor_set)
 
-# bid_function_set = set(["euclidean_distance", "euclidean_distance_with_insertion, distance_over_variance_with_insertion"])
-bid_function_set = set(["distance_over_variance_with_insertion"])
+# bid_function_set = set(["euclidean_distance", "euclidean_distance_with_insertion, distance_over_variance, distance_over_variance_with_insertion"])
+bid_function_set = set(["distance_times_variance", "distance_times_variance_with_insertion"])
 print("Set of bid functions: ", bid_function_set)
 
 # use_queue_sorting_set = set([True, False])
 use_queue_sorting_set = set([False])
 print("Set of use_queue_sorting states: ", use_queue_sorting_set)
 
+# drop_low_variance_tasks_set = set([True, False])
+drop_low_variance_tasks_set = set([True])
+print("Set of drop_low_variance_tasks states: ", drop_low_variance_tasks_set)
+
 # Create all combinations of trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor
-combinations = list(itertools.product(trial_num_set, num_robots_set, ta_algo_set, sampling_algo_set, env_crop_factor_set, bid_function_set, use_queue_sorting_set))
+combinations = list(itertools.product(trial_num_set, num_robots_set, ta_algo_set, sampling_algo_set, env_crop_factor_set, bid_function_set, use_queue_sorting_set, drop_low_variance_tasks_set))
 # Remove combinations that have no trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor
 combinations = [i for i in combinations if i[0] != i[2] != i[3] != i[4] != i[5] != i[6]]
 total_trials = len(combinations)
@@ -67,9 +71,10 @@ for trial_params in combinations:
     env_crop_factor = trial_params[4]
     bid_function = trial_params[5]
     use_queue_sorting = trial_params[6]
+    drop_low_variance_tasks = trial_params[7]
 
     # Check if trial has already run by checking if rosbag file exists
-    bag_name = str(bid_function)+'_use_queue_sorting_'+str(use_queue_sorting)+'_'+str(trial_num)
+    bag_name = str(bid_function)+'_drop_low_var_tasks_'+str(drop_low_variance_tasks)+'_half_thresh_'+str(trial_num)
     figures_path = package_path+'/figures/'+bag_name
     
     if exists(package_path+'/bags/'+bag_name+'.bag'):

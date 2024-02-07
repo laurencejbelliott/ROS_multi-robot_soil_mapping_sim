@@ -32,7 +32,11 @@ def convert_to_gif(path_to_png_files, gif_name, fps=.5, text_filter=None):
         elif text_filter in file_name:
             # print(file_name)
             images.append(imageio.imread(file_name))
-    imageio.mimsave(gif_name, images, fps=fps, loop=0)
+    try:
+        imageio.mimsave(gif_name, images, fps=fps, loop=0)
+    except ValueError:
+        print("No images found in: " + path_to_png_files)
+        return
 
     print("GIF saved to: " + gif_name)
 
@@ -41,23 +45,30 @@ if __name__ == '__main__':
     # Get path of figures directory
     rp = RosPack()
     package_path = rp.get_path('stage_soil_mapping_mrs')
+
+    conditions = [
+        "distance_times_variance_drop_low_var_tasks_True_half_thresh",
+        "distance_times_variance_with_insertion_drop_low_var_tasks_True_half_thresh"
+    ]
+    num_trials = 10
     
-    for i in range(1, 11):
+    for condition in conditions:
+        for i in range(1, num_trials+1):
+            figures_path = package_path + '/figures/' + condition + '_' + str(i)
+            print(figures_path)
 
-        figures_path = package_path + '/figures/distance_over_variance_with_insertion_use_queue_sorting_False_' + str(i)
+            # Animate kriging interpolation
+            path_to_png_files = figures_path + '/interpolation_raw/'
 
-        # Animate kriging interpolation
-        path_to_png_files = figures_path + '/interpolation_raw/'
+            png_files = glob.glob(path_to_png_files + '*.png')
 
-        png_files = glob.glob(path_to_png_files + '*.png')
+            convert_to_gif(path_to_png_files,
+                        figures_path+'/interpolation_animation.gif')
+            
+            # Animate kriging variance
+            path_to_png_files = figures_path + '/variance_raw/'
 
-        convert_to_gif(path_to_png_files,
-                    figures_path+'/interpolation_animation.gif')
-        
-        # Animate kriging variance
-        path_to_png_files = figures_path + '/variance_raw/'
+            png_files = glob.glob(path_to_png_files + '*.png')
 
-        png_files = glob.glob(path_to_png_files + '*.png')
-
-        convert_to_gif(path_to_png_files,
-                        figures_path+'/variance_animation.gif')
+            convert_to_gif(path_to_png_files,
+                            figures_path+'/variance_animation.gif')

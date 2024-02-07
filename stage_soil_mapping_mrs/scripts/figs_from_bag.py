@@ -27,8 +27,6 @@ def figs_from_bag(bag_path):
             break
 
     robots = {} # dictionary to store robot trajectories
-    kriging_interpolations = [] # List of dicts to store kriging interpolations {interpolation: np.array, time: int}
-    kriging_variances = [] # List of dicts to store kriging variances {variance: np.array, time: int}
 
     for topic, msg, t in bag.read_messages():
         kriging_interpolation_dict = {}
@@ -66,13 +64,19 @@ def figs_from_bag(bag_path):
             robots[robot_name]['samples_x'].append(x)
             robots[robot_name]['samples_y'].append(y)
 
-        # Get raw kriging interpolation, converting from OccupancyGrid to numpy array
+        # Get raw kriging interpolation, converting from Map msg to numpy array
         if 'interpolated_map_raw' in topic and t > start_time:
             kriging_interpolation_dict['time'] = t
-            numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
+            # Get rows from Map msg
+            numpy_array = [row.data for row in msg.row]
+            numpy_array = np.array(numpy_array)
+            # print(numpy_array)
+            # print(type(numpy_array))
+            # print(numpy_array.shape)
 
-            # Shrink the numpy array back to the original size
-            numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
+            
+            # # Shrink the numpy array back to the original size
+            # numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
 
             kriging_interpolation_dict['interpolation_raw'] = numpy_array
 
@@ -83,7 +87,8 @@ def figs_from_bag(bag_path):
             # Calculate time since start in seconds
             time_since_start = np.round((t - start_time).to_sec())
 
-            ax.set_title('Kriging Interpolation (Raw) at Time: ' + str(time_since_start) + 's')
+            ax.set_title('Kriging Interpolation at Time: ' + str(time_since_start) + 's')
+            fig.colorbar(ax.imshow(numpy_array, cmap='gray', origin='lower'), ax=ax)
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
 
@@ -104,12 +109,20 @@ def figs_from_bag(bag_path):
             plt.savefig(figures_path + '/' + bag_name + '/interpolation_raw/' + str(time_since_start) + 's.png')
             plt.close(fig)
 
+        # Get raw kriging variance, converting from Map msg to numpy array
         if 'kriging_variance_raw' in topic and t > start_time:
             kriging_variance_dict['time'] = t
-            numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
+            # Get rows from Map msg
+            numpy_array = [row.data for row in msg.row]
+            numpy_array = np.array(numpy_array)
+            # print(numpy_array)
+            # print(type(numpy_array))
+            # print(numpy_array.shape)
+            
+            # numpy_array = np.array(msg.data).reshape(msg.info.height, msg.info.width)
 
-            # Shrink the numpy array back to the original size
-            numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
+            # # Shrink the numpy array back to the original size
+            # numpy_array = cv2.resize(numpy_array, (int(numpy_array.shape[1]/20), int(numpy_array.shape[0]/20)), interpolation=cv2.INTER_NEAREST)
 
             kriging_variance_dict['variance_raw'] = numpy_array
 
@@ -120,7 +133,8 @@ def figs_from_bag(bag_path):
             # Calculate time since start in seconds
             time_since_start = np.round((t - start_time).to_sec())
 
-            ax.set_title('Kriging Variance (Raw) at Time: ' + str(time_since_start) + 's')
+            ax.set_title('Kriging Variance at Time: ' + str(time_since_start) + 's')
+            fig.colorbar(ax.imshow(numpy_array, cmap='gray', origin='lower'), ax=ax)
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
 
@@ -143,5 +157,17 @@ def figs_from_bag(bag_path):
             
 
 if __name__ == '__main__':
-    bag_path = rp.get_path('stage_soil_mapping_mrs')+'/bags/distance_over_variance_with_insertion_use_queue_sorting_False_3.bag'
+    bag_path = rp.get_path('stage_soil_mapping_mrs')+'/bags/metrics.bag'
+
+    # Delete all figures (files ending with .png) in figures_path
+    for root, dirs, files in os.walk(figures_path + '/interpolation_raw'):
+        for file in files:
+            if file.endswith('.png'):
+                os.remove(os.path.join(root, file))
+
+    for root, dirs, files in os.walk(figures_path + '/variance_raw'):
+        for file in files:
+            if file.endswith('.png'):
+                os.remove(os.path.join(root, file))
+
     figs_from_bag(bag_path)
