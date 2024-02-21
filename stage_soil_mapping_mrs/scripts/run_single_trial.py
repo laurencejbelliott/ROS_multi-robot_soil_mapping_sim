@@ -15,10 +15,10 @@ num_robots = 3
 ta_algo = "SSI"
 sampling_algo = "dynamic"
 env_crop_factor = 1 # Environment cropping is not yet implemented
-sampling_time_budget = 240 # seconds
+sampling_time_budget = 9999 # seconds
 simulator = "virtual_robots"
 # bid_function = "distance_times_variance"
-bid_function = "distance_times_variance_with_insertion"
+bid_function = "distance_over_variance_with_insertion"
 use_queue_sorting = False
 drop_low_variance_tasks = True
 

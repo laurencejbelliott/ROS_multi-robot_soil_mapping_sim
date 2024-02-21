@@ -43,15 +43,16 @@ env_crop_factor_set = set([env_crop_factor])
 print("Set of environment cropping factors: ", env_crop_factor_set)
 
 # bid_function_set = set(["euclidean_distance", "euclidean_distance_with_insertion, distance_over_variance, distance_over_variance_with_insertion"])
-bid_function_set = set(["distance_times_variance", "distance_times_variance_with_insertion"])
+# bid_function_set = set(["distance_over_variance", "distance_over_variance_with_insertion", "euclidean_distance_with_insertion"])
+bid_function_set = set(["distance_over_variance", "distance_over_variance_with_insertion", "euclidean_distance"])
 print("Set of bid functions: ", bid_function_set)
 
 # use_queue_sorting_set = set([True, False])
 use_queue_sorting_set = set([False])
 print("Set of use_queue_sorting states: ", use_queue_sorting_set)
 
-# drop_low_variance_tasks_set = set([True, False])
-drop_low_variance_tasks_set = set([True])
+drop_low_variance_tasks_set = set([True, False])
+# drop_low_variance_tasks_set = set([True])
 print("Set of drop_low_variance_tasks states: ", drop_low_variance_tasks_set)
 
 # Create all combinations of trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor

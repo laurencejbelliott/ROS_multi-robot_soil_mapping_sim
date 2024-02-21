@@ -88,7 +88,7 @@ class Coordinator:
         self.simulator = simulator
 
         self.robot_speed = 2.0 # m/s
-        self.bid_function = bid_function # "euclidean_distance", "euclidean_distance_with_insertion", "distance_times_variance", "distance_times_variance_with_insertion"
+        self.bid_function = bid_function # "euclidean_distance", "euclidean_distance_with_insertion", "distance_over_variance", "distance_over_variance_with_insertion"
         self.sort_tasks = use_queue_sorting # Sort tasks in task queue to minimise distance travelled by robot
         self.drop_low_variance_tasks = drop_low_variance_tasks # Drop tasks with low kriging variance from task queue
 
@@ -367,11 +367,11 @@ class Coordinator:
         return points
 
 
-    def calculate_task_queue_cost_DTV(self, robot_position, task_queue, robot_speed):
+    def calculate_task_queue_cost_DOV(self, robot_position, task_queue, robot_speed):
         # Calculate cost of task queue as sum of Euclidean distances between each task
         cost = 0
         for i in range(len(task_queue) - 1):
-            cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) * (0.5 * self.kriging_variance[int(task_queue[i][0]), int(task_queue[i][1])])
+            cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) / self.kriging_variance[int(task_queue[i][0]), int(task_queue[i][1])]
         return cost
     
     def rr_ta(self):  # Round Robin Task Allocation
@@ -423,14 +423,15 @@ class Coordinator:
                             robot_tasks_sanitised = []
                             for task_position in copy.deepcopy(task_queue):
                                 # Handle task where insertion index is given as well as position
-                                if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
+                                if type(task_position[0]) != np.int64 and type(task_position[0]) != float and type(task_position[0]) != int:
                                     if len(task_position[0]) == 2:
                                         task_position = task_position[0]
                                 robot_tasks_sanitised.append(task_position)
                             robot_tasks_sanitised = np.array(robot_tasks_sanitised)
                             # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
                             # start = perf_counter()
-                            cost = calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
+                            cost = calculate_path_cost(robot_position, task, self.robot_speed)
+                            cost += calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
                             # end = perf_counter()
 
                             # avg_queue_cost_times.append((end - start) * 1000)
@@ -446,31 +447,32 @@ class Coordinator:
                     elif self.bid_function == "euclidean_distance":
                         bid = calculate_path_cost(robot_position, task, self.robot_speed)
 
-                    # Calculate bid as Euclidean distance times kriging variance at robot position
-                    elif self.bid_function == "distance_times_variance":
+                    # Calculate bid as Euclidean distance over kriging variance at task position
+                    elif self.bid_function == "distance_over_variance":
                         # Calculate bid
-                        bid = calculate_path_cost(robot_position, task, self.robot_speed) * (0.5 * self.kriging_variance[int(robot_position[1]), int(robot_position[0])])
-                    # Calculate bid as Euclidean distance times kriging variance at robot position, with cheapest-insertion heuristic
-                    elif self.bid_function == "distance_times_variance_with_insertion":
+                        bid = calculate_path_cost(robot_position, task, self.robot_speed) / self.kriging_variance[int(task[0]), int(task[1])]
+                    # Calculate bid as Euclidean distance over kriging variance at task position, with cheapest-insertion heuristic
+                    elif self.bid_function == "distance_over_variance_with_insertion":
                         min_cost = float("inf")
                         min_cost_index = 0
                         robot_task_queue = self.robot_task_queues[robot]
                         for i in range(len(robot_task_queue) + 1):
                             task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
-                            cost = calculate_path_cost(robot_position, task, self.robot_speed)
-                            cost += self.calculate_task_queue_cost_DTV(robot_position, task_queue, self.robot_speed)
+                            cost = calculate_path_cost(robot_position, task, self.robot_speed) / self.kriging_variance[int(task[0]), int(task[1])]
+                            cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
                             if cost < min_cost:
                                 min_cost = cost
                                 min_cost_index = i
                         min_cost_indices.append(min_cost_index)
                         bid = min_cost
+                    print(self.bid_function)
                     bids.append(bid)
                 
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
                 # for b in range(len(bids)):
                 #     rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
 
-                if self.bid_function == "euclidean_distance_with_insertion" or self.bid_function == "distance_times_variance_with_insertion":
+                if self.bid_function == "euclidean_distance_with_insertion" or self.bid_function == "distance_over_variance_with_insertion":
                     # Get index of min bid
                     min_bid_index = bids.index(min(bids))
                     insert_index = min_cost_indices[min_bid_index]
@@ -478,7 +480,7 @@ class Coordinator:
                     # rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
 
                     ta["robot_" + str(min_bid_index)].append([task, insert_index])
-                elif self.bid_function == "euclidean_distance" or self.bid_function == "distance_times_variance":
+                elif self.bid_function == "euclidean_distance" or self.bid_function == "distance_over_variance":
                     # Get index of min bid
                     min_bid_index = bids.index(min(bids))
 

@@ -5,10 +5,15 @@ from bagpy import bagreader
 import pandas as pd
 import numpy as np
 from rospkg import RosPack
+from rosbag.bag import ROSBagException
 
 def metrics_from_bag(bag_path, bag_folder_path):
     # Read the bag file
-    b = bagreader(bag_path)
+    try:
+        b = bagreader(bag_path)
+    except ROSBagException as e:
+        print("Error reading bag file: " + str(e))
+        return
 
     # Check topics
     topic_table = b.topic_table
