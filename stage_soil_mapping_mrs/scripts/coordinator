@@ -13,6 +13,7 @@ import copy
 import operator
 import shutil
 import cv2
+import actionlib
 from math import sqrt, floor
 from time import sleep
 
@@ -24,6 +25,7 @@ from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal
 from stage_soil_mapping_mrs.msg import InsertTask, Map, Row
 from shapely.geometry import MultiPoint
+from move_base_msgs.msg import MoveBaseAction
 import matplotlib
 matplotlib.use('Agg')
 
@@ -248,6 +250,7 @@ class Coordinator:
         self.robot_tasks_allocated_count_pubs = {}
         self.robot_ta_fairness_pubs = {}
         self.robot_task_queue_pubs = {}
+        self.robot_action_clients = {}
         for robot in self.robots:
             # Tasks allocated publishers
             self.robot_tasks_allocated_count[robot] = 0
@@ -261,6 +264,12 @@ class Coordinator:
 
             # Task queue publishers
             self.robot_task_queue_pubs[robot] = rospy.Publisher("/" + robot + "/sampling_task_queue/set_goal_queue", String, queue_size=0)
+
+            # Robot move_base action clients
+            self.robot_action_clients[robot] = actionlib.SimpleActionClient('/'+ robot +'/move_base', MoveBaseAction)
+            rospy.loginfo("Coordinator's action client for " + robot + " waiting for move_base actionserver...")
+            self.robot_action_clients[robot].wait_for_server()
+            rospy.loginfo("Coordinator's action client for " + robot + " connected to move_base actionserver!")
 
         for robot in self.robots:
             if self.simulator == "stage_ros":
@@ -811,13 +820,18 @@ class Coordinator:
                 
                 # Calculate the median of the positive kriging variance values
                 kriging_variance_median = np.median(kriging_variance_positive)
+                kriging_variance_threshold = kriging_variance_median
                 rospy.loginfo("Dropping tasks with kriging variance less than median of positive kriging variance values...")
                 rospy.loginfo("Median positive kriging variance: " + str(kriging_variance_median))
+                rospy.loginfo("Threshold: " + str(kriging_variance_threshold))
 
                 # Drop tasks from created tasks list where kriging variance is less than the median of positive kriging variance values
                 tasks_to_drop = []
                 for task in self.tasks:
-                    if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_median):
+                    print("Task: " + str(task))
+                    print("Task kriging variance: " + str(self.kriging_variance[int(task[1]), int(task[0])]))
+                    print("Threshold: " + str(kriging_variance_threshold) + "\n")
+                    if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_threshold):
                         tasks_to_drop.append(task)
                 rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks...")
                 rospy.loginfo("Tasks:" + str(self.tasks))
@@ -843,7 +857,10 @@ class Coordinator:
                     tasks = self.robot_task_queues[robot]
                     tasks_to_drop = []
                     for task in tasks:
-                        if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_median):
+                        print("Task: " + str(task))
+                        print("Task kriging variance: " + str(self.kriging_variance[int(task[1]), int(task[0])]))
+                        print("Threshold: " + str(kriging_variance_threshold) + "\n")
+                        if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_threshold):
                             tasks_to_drop.append(task)
                     rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks from " + robot + "'s task queue...")
                     rospy.loginfo("Tasks to drop: " + str(tasks_to_drop))
@@ -867,8 +884,30 @@ class Coordinator:
                     self.robot_task_queue_pubs[robot].publish(task_queue_json)
                     rospy.loginfo("Remaining tasks in " + robot + "'s task queue: " + str(self.robot_task_queues[robot]))
 
+                    # TODO: Use actionclient to check if robot is currently executing a task and get its goal position
+                    # # Use actionclient to check if robot is currently executing a task and get its goal position
+                    # # If the robot is currently executing a task, check if the task's kriging variance is less than the median of positive kriging variance values
+                    # # If so, cancel the task and remove it from the robot's task queue
 
-                    # TODO: Drop robot's current task if it has a kriging variance less than the half the median of positive kriging variance values
+                    # # Get robot's current action status
+                    # action_client = self.robot_action_clients[robot]
+                    # action_client.wait_for_server()
+                    # goal = action_client.get_state()
+                    # print("Goal: " + str(goal)) # 1 = active, 2 = preempted, 3 = done, 4 = aborted, 5 = rejected, 6 = preempting, 7 = recalling, 8 = recalling, 9 = lost
+                    # if goal == 1 or goal == 9:
+                    #     # Get robot's current goal position
+                    #     goal = action_client.get_goal() # TODO: get_goal method doesn't exist, need to find another way to get the robot's current goal position
+                    #     goal = goal.target_pose.pose.position
+                    #     goal = (goal.x, goal.y)
+                    #     print("Goal: " + str(goal))
+                    #     print("Goal kriging variance: " + str(self.kriging_variance[int(goal[1]), int(goal[0])]))
+                    #     print("Threshold: " + str(kriging_variance_threshold) + "\n")
+                    #     # Check if the task's kriging variance is less than the median of positive kriging variance values
+                    #     if self.kriging_variance[int(goal[1]), int(goal[0])] < (kriging_variance_threshold * 4):
+                    #         # Cancel the task and remove it from the robot's task queue
+                    #         action_client.cancel_all_goals()
+                    #         self.robot_task_queues[robot].remove(goal)
+                    #         rospy.loginfo("Active task cancelled and dropped from " + robot + "'s task queue: " + str(goal))
                     
             
             if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():

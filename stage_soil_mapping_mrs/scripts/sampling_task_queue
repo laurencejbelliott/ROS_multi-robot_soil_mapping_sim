@@ -193,6 +193,8 @@ def queue_nav_goal_listener():
                         goal_exec_time = goal_end_time - goal_start_time
                         task_completion_times.append(goal_exec_time)
                         task_completion_times_pub.publish(data=task_completion_times)
+                    elif state == 4:
+                        rospy.logerr("Navigation goal was aborted!")
                     else:
                         rospy.logerr("Navigation goal failed!")
             else:
