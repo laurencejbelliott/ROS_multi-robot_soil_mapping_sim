@@ -5,6 +5,7 @@ import rospkg
 import actionlib
 import pickle
 import copy
+import json
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String, Float32MultiArray
 from geometry_msgs.msg import Pose
@@ -95,6 +96,22 @@ def insert_nav_goal_callback(data):
             rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
 
 
+def set_goal_queue_callback(data):
+    global goal_queue
+    goal_queue = []
+
+    rospy.loginfo("New goal queue received: " + str(data.data))
+    # Convert JSON list of lists (new_goal_queue_hr) to list of MoveBaseGoal objects (goal_queue)
+    new_goal_queue_hr = json.loads(data.data)
+
+    for goal in new_goal_queue_hr:
+        new_goal = MoveBaseGoal()
+        new_goal.target_pose.pose.position.x = goal[0]
+        new_goal.target_pose.pose.position.y = goal[1]
+        new_goal.target_pose.pose.orientation.w = 1.0
+        goal_queue.append(new_goal)
+    
+
 def pub_mock_pen_reading(goal):
     # If nav. was successful, stop for 5 seconds and read data indexed by position
     rospy.loginfo("Taking penetrometer reading...")
@@ -120,6 +137,7 @@ def pub_mock_pen_reading(goal):
 def queue_nav_goal_listener():
     rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
     rospy.Subscriber(namespace+node_name+'/insert_goal', InsertTask, insert_nav_goal_callback)
+    rospy.Subscriber(namespace+node_name+'/set_goal_queue', String, set_goal_queue_callback)
 
     r = rospy.Rate(1)
     while not rospy.is_shutdown():
@@ -175,6 +193,8 @@ def queue_nav_goal_listener():
                         goal_exec_time = goal_end_time - goal_start_time
                         task_completion_times.append(goal_exec_time)
                         task_completion_times_pub.publish(data=task_completion_times)
+                    elif state == 4:
+                        rospy.logerr("Navigation goal was aborted!")
                     else:
                         rospy.logerr("Navigation goal failed!")
             else:
@@ -187,7 +207,10 @@ def queue_nav_goal_listener():
                 task_completion_times.append(goal_exec_time)
                 task_completion_times_pub.publish(data=task_completion_times)
 
-            goal_queue.pop(0)
+            try:
+                goal_queue.pop(0)
+            except IndexError:
+                pass
 
             # Publish the human-readable goal queue without the completed goal
             goal_queue_hr = []
