@@ -5,6 +5,7 @@ import rospkg
 import actionlib
 import pickle
 import copy
+import os
 import json
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String, Float32MultiArray
@@ -14,6 +15,7 @@ from stage_soil_mapping_mrs.msg import InsertTask
 # TODO: Add rospy_message_converter to rosdep dependencies
 from rospy_message_converter import message_converter
 import numpy as np
+import pandas as pd
 
 # TODO:
 #  - Retry failed goals x times, then cancel goal and remove from queue
@@ -47,6 +49,10 @@ cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
 task_completion_times_pub = rospy.Publisher(namespace+node_name+"/task_completion_times", Float32MultiArray, queue_size=1, latch=True)
 global current_pose
 
+# Task logging dataframe (task_queue_length is the length of the queue at the time of allocation)
+task_log = pd.DataFrame(columns=['robot_id', 'x', 'y', 'reading', 'allocation_time', 'insertion_ix', 'task_queue_length', 'start_time', 'end_time', 'exec_time'])
+tasks = {} # Dict to store task information for logging (each task represented by its own dictionary)
+
 
 def stage_ground_truth_pose_cb(odom_msg):
     global current_pose
@@ -60,7 +66,22 @@ stage_ground_truth_pose_sub = rospy.Subscriber(namespace+'base_pose_ground_truth
 def queue_nav_goal_callback(data):
     rospy.loginfo("New goal received: " + str(data.target_pose.pose.position.x) + "," +
                   str(data.target_pose.pose.position.y))
+    rospy.loginfo("Goal queue length: " + str(len(goal_queue)))
 
+    task_id = str((math.floor(data.target_pose.pose.position.x), math.floor(data.target_pose.pose.position.y)))
+    tasks[task_id] = {
+        'robot_id': namespace.strip("/"),
+        'x': data.target_pose.pose.position.x,
+        'y': data.target_pose.pose.position.y,
+        'allocation_time': rospy.get_time(),
+        'insertion_ix': len(goal_queue),
+        'task_queue_length': len(goal_queue),
+        'start_time': "NaN",
+        'end_time': "NaN",
+        'exec_time': "NaN",
+        'reading': 'NaN'
+        }
+    
     goal_queue.append(data)
 
     # Human-readable goal queue
@@ -81,7 +102,22 @@ def insert_nav_goal_callback(data):
 
     rospy.loginfo("New goal received: " + str(goal.target_pose.pose.position.x) + "," +
                     str(goal.target_pose.pose.position.y) + " at index " + str(index))
+    rospy.loginfo("Goal queue length: " + str(len(goal_queue)))
     
+    task_id = str((math.floor(goal.target_pose.pose.position.x), math.floor(goal.target_pose.pose.position.y)))
+    tasks[task_id] = {
+        'robot_id': namespace.strip("/"),
+        'x': goal.target_pose.pose.position.x,
+        'y': goal.target_pose.pose.position.y,
+        'allocation_time': rospy.get_time(),
+        'insertion_ix': index,
+        'task_queue_length': len(goal_queue),
+        'start_time': "NaN",
+        'end_time': "NaN",
+        'exec_time': "NaN",
+        'reading': 'NaN'
+        }
+
     goal_queue.insert(index, goal)
 
     # Human-readable goal queue
@@ -91,25 +127,25 @@ def insert_nav_goal_callback(data):
 
     if len(goal_queue) > 0:
         goal_queue_pub.publish(str(goal_queue_hr))
-        rospy.loginfo("\nNav goal queue:")
-        for g in range(len(goal_queue)):
-            rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
+        # rospy.loginfo("\nNav goal queue:")
+        # for g in range(len(goal_queue)):
+            # rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
 
 
-def set_goal_queue_callback(data):
-    global goal_queue
-    goal_queue = []
+# def set_goal_queue_callback(data):
+#     global goal_queue
+#     goal_queue = []
 
-    rospy.loginfo("New goal queue received: " + str(data.data))
-    # Convert JSON list of lists (new_goal_queue_hr) to list of MoveBaseGoal objects (goal_queue)
-    new_goal_queue_hr = json.loads(data.data)
+#     rospy.loginfo("New goal queue received: " + str(data.data))
+#     # Convert JSON list of lists (new_goal_queue_hr) to list of MoveBaseGoal objects (goal_queue)
+#     new_goal_queue_hr = json.loads(data.data)
 
-    for goal in new_goal_queue_hr:
-        new_goal = MoveBaseGoal()
-        new_goal.target_pose.pose.position.x = goal[0]
-        new_goal.target_pose.pose.position.y = goal[1]
-        new_goal.target_pose.pose.orientation.w = 1.0
-        goal_queue.append(new_goal)
+#     for goal in new_goal_queue_hr:
+#         new_goal = MoveBaseGoal()
+#         new_goal.target_pose.pose.position.x = goal[0]
+#         new_goal.target_pose.pose.position.y = goal[1]
+#         new_goal.target_pose.pose.orientation.w = 1.0
+#         goal_queue.append(new_goal)
     
 
 def pub_mock_pen_reading(goal):
@@ -127,17 +163,39 @@ def pub_mock_pen_reading(goal):
         data_x, data_y = math.floor(pose_x), math.floor(pose_y)
     rospy.sleep(1)
     mock_reading = mock_pen_data[data_y, data_x]
+
+    # Add reading to task dictionary
+    tasks[str((math.floor(pose_x), math.floor(pose_y)))]['reading'] = mock_reading
+
     reading_dict = {'robot_id': namespace.strip("/"), 'x': pose_x, 'y': pose_y, 'reading': mock_reading}
     rospy.loginfo(namespace[1:-1] + " sampled " + str(reading_dict))
     reading_msg = message_converter.convert_dictionary_to_ros_message('std_msgs/String',
                                                                       {'data': str(reading_dict)})
     mock_pen_reading_pub.publish(reading_msg)
 
+    # Create task log dataframe from task dictionaries
+    global task_log
+    task_log = pd.DataFrame.from_dict(tasks, orient='index')
+
+    # Save task log to CSV file, with robot_id in filename
+    # First check if the logs directory exists, if not, create it
+    try:
+        os.makedirs(package_path + '/logs/test_run/')
+    except FileExistsError:
+        pass
+
+    # Save the file
+    task_log.to_csv(package_path + '/logs/test_run/task_log_' + namespace[1:-1] + '.csv')
+    rospy.loginfo("Task log saved to " + package_path + '/logs/test_run/task_log_' + namespace[1:-1] + '.csv')
+
+    # rospy.loginfo("Task log:\n" + str(task_log))
+
+
 
 def queue_nav_goal_listener():
     rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
     rospy.Subscriber(namespace+node_name+'/insert_goal', InsertTask, insert_nav_goal_callback)
-    rospy.Subscriber(namespace+node_name+'/set_goal_queue', String, set_goal_queue_callback)
+    # rospy.Subscriber(namespace+node_name+'/set_goal_queue', String, set_goal_queue_callback)
 
     r = rospy.Rate(1)
     while not rospy.is_shutdown():
@@ -156,6 +214,9 @@ def queue_nav_goal_listener():
             rospy.loginfo("Sending navigation goal for sampling position...")
 
             goal_start_time = rospy.get_time()
+
+            # Add start time to task dictionary
+            tasks[str((math.floor(goal.target_pose.pose.position.x), math.floor(goal.target_pose.pose.position.y)))]['start_time'] = goal_start_time
 
             if not use_simplified_nav:
                 wait = client.wait_for_result()
@@ -193,6 +254,13 @@ def queue_nav_goal_listener():
                         goal_exec_time = goal_end_time - goal_start_time
                         task_completion_times.append(goal_exec_time)
                         task_completion_times_pub.publish(data=task_completion_times)
+
+                        # Add end time to task dictionary
+                        tasks[str((math.floor(goal.target_pose.pose.position.x), math.floor(goal.target_pose.pose.position.y)))]['end_time'] = goal_end_time
+
+                        # Add execution time to task dictionary
+                        tasks[str((math.floor(goal.target_pose.pose.position.x), math.floor(goal.target_pose.pose.position.y)))]['exec_time'] = goal_exec_time
+
                     elif state == 4:
                         rospy.logerr("Navigation goal was aborted!")
                     else:

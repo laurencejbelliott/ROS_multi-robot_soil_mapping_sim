@@ -489,9 +489,11 @@ class Coordinator:
                     min_bid_index = bids.index(min(bids))
                     insert_index = min_cost_indices[min_bid_index]
 
-                    # rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
+                    rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
+                    rospy.loginfo("Insertion index: " + str(insert_index))
 
                     ta["robot_" + str(min_bid_index)].append([task, insert_index])
+                    rospy.loginfo("Task allocations for robot " + "robot_" + str(min_bid_index) + ": " + str(ta["robot_" + str(min_bid_index)]))
                 elif self.bid_function == "euclidean_distance" or self.bid_function == "distance_over_variance":
                     # Get index of min bid
                     min_bid_index = bids.index(min(bids))
@@ -500,33 +502,36 @@ class Coordinator:
 
                     ta["robot_" + str(min_bid_index)].append([task, -1])
 
-        if self.sort_tasks:
-            # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
-            for robot in self.robots:
-                if len(ta[robot]) > 0 and type(ta[robot][0]) != tuple:
-                    # rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+        # if self.sort_tasks:
+        #     rospy.loginfo("Sorting task queues to minimize distance travelled by robots...")
+        #     # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
+        #     for robot in self.robots:
+        #         if len(ta[robot]) > 0 and type(ta[robot][0]) != tuple:
+        #             # rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
 
-                    robot_tasks_sanitised = []
-                    for task_position in copy.deepcopy(ta[robot]):
-                        # Handle task where insertion index is given as well as position
-                        if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
-                            if len(task_position[0]) == 2:
-                                task_position = task_position[0]
-                        robot_tasks_sanitised.append(task_position)
+        #             robot_tasks_sanitised = []
+        #             for task_position in copy.deepcopy(ta[robot]):
+        #                 # Handle task where insertion index is given as well as position
+        #                 if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
+        #                     if len(task_position[0]) == 2:
+        #                         task_position = task_position[0]
+        #                 robot_tasks_sanitised.append(task_position)
 
-                    # sorted_tasks = sorted(ta[robot], key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
-                    # start = perf_counter()
-                    sorted_tasks = sorted(robot_tasks_sanitised, key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
-                    # end = perf_counter()
+        #             # sorted_tasks = sorted(ta[robot], key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
+        #             # start = perf_counter()
+        #             sorted_tasks = sorted(robot_tasks_sanitised, key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
+        #             # end = perf_counter()
 
-                    # avg_queue_sort_times.append((end - start) * 1000)
+        #             # avg_queue_sort_times.append((end - start) * 1000)
 
-                    # rospy.loginfo("Mean time to sort task queue: " + str(np.mean(avg_queue_sort_times)) + "ms")
-                    ta[robot] = sorted_tasks
-                # elif len(ta[robot]) > 0 and type(ta[robot][0]) == tuple:
-                #     rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
-                #     sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
-                #     ta[robot] = sorted_tasks
+        #             # rospy.loginfo("Mean time to sort task queue: " + str(np.mean(avg_queue_sort_times)) + "ms")
+        #             ta[robot] = sorted_tasks
+        #         # elif len(ta[robot]) > 0 and type(ta[robot][0]) == tuple:
+        #         #     rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+        #         #     sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+        #         #     ta[robot] = sorted_tasks
+        rospy.loginfo("Task allocations from SSI: " + str(ta))
+        
         return ta
 
 
@@ -534,6 +539,8 @@ class Coordinator:
         # rospy.loginfo("Task allocations: " + str(task_allocations))
         # If using dynamic sampling, insert tasks using given index, rather than adding them to the end of the queue
         # Publish task allocations to robots
+        rospy.loginfo("Publishing task allocations to robots:")
+        rospy.loginfo(task_allocations)
         for robot in self.robots:
             if self.ta_algo == "SSI" and len(task_allocations[robot]) > 0 and type(task_allocations[robot][0]) != tuple:
                 new_task_topic = "/" + robot + "/sampling_task_queue/insert_goal"
@@ -556,12 +563,14 @@ class Coordinator:
                     else:
                         # rospy.loginfo("Task: " + str(task))
                         # rospy.loginfo("Task shape: " + str(np.array(task).shape))
-                        if np.array(task).shape == (1, 2):
-                            task_goal.target_pose.pose.position.x = task[0][0]
-                            task_goal.target_pose.pose.position.y = task[0][1]
-                        elif np.array(task).shape == (2,):
-                            task_goal.target_pose.pose.position.x = task[0]
-                            task_goal.target_pose.pose.position.y = task[1]
+                        # if np.array(task).shape == (1, 2):
+                        #     task_goal.target_pose.pose.position.x = task[0][0]
+                        #     task_goal.target_pose.pose.position.y = task[0][1]
+                        # elif np.array(task).shape == (2,):
+                        #     task_goal.target_pose.pose.position.x = task[0]
+                        #     task_goal.target_pose.pose.position.y = task[1]
+                        task_goal.target_pose.pose.position.x = task[0][0]
+                        task_goal.target_pose.pose.position.y = task[0][1]
                         task_goal.target_pose.pose.orientation.w = 1.0
 
                     insert_task_msg = InsertTask()
@@ -846,69 +855,11 @@ class Coordinator:
                 for task in tasks_to_drop:
                     tasks_to_drop_indices.append(tasks_as_strings.index(str(task)))
                 
+                # Drop tasks from list
                 self.tasks = np.array(self.tasks)
-
                 self.tasks = np.delete(self.tasks, tasks_to_drop_indices, axis=0)
                 self.tasks = self.tasks.tolist()
                 rospy.loginfo("Remaining new tasks: " + str(self.tasks))
-
-                # Drop tasks from each robot's task queue if they have a kriging variance less than the median of positive kriging variance values
-                for robot in self.robots:
-                    tasks = self.robot_task_queues[robot]
-                    tasks_to_drop = []
-                    for task in tasks:
-                        print("Task: " + str(task))
-                        print("Task kriging variance: " + str(self.kriging_variance[int(task[1]), int(task[0])]))
-                        print("Threshold: " + str(kriging_variance_threshold) + "\n")
-                        if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_threshold):
-                            tasks_to_drop.append(task)
-                    rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks from " + robot + "'s task queue...")
-                    rospy.loginfo("Tasks to drop: " + str(tasks_to_drop))
-
-                    # Get indices of tasks to drop
-                    tasks_to_drop_indices = []
-                    tasks_as_strings = []
-                    for task in tasks:
-                        tasks_as_strings.append(str(task))
-
-                    for task in tasks_to_drop:
-                        tasks_to_drop_indices.append(tasks_as_strings.index(str(task)))
-
-                    tasks = np.array(tasks)
-                    tasks = np.delete(tasks, tasks_to_drop_indices, axis=0)
-                    tasks = tasks.tolist()
-                    self.robot_task_queues[robot] = tasks
-
-                    # Publish updated task queue to /robot_x/sampling_task_queue/set_goal_queue
-                    task_queue_json = json.dumps(self.robot_task_queues[robot])
-                    self.robot_task_queue_pubs[robot].publish(task_queue_json)
-                    rospy.loginfo("Remaining tasks in " + robot + "'s task queue: " + str(self.robot_task_queues[robot]))
-
-                    # TODO: Use actionclient to check if robot is currently executing a task and get its goal position
-                    # # Use actionclient to check if robot is currently executing a task and get its goal position
-                    # # If the robot is currently executing a task, check if the task's kriging variance is less than the median of positive kriging variance values
-                    # # If so, cancel the task and remove it from the robot's task queue
-
-                    # # Get robot's current action status
-                    # action_client = self.robot_action_clients[robot]
-                    # action_client.wait_for_server()
-                    # goal = action_client.get_state()
-                    # print("Goal: " + str(goal)) # 1 = active, 2 = preempted, 3 = done, 4 = aborted, 5 = rejected, 6 = preempting, 7 = recalling, 8 = recalling, 9 = lost
-                    # if goal == 1 or goal == 9:
-                    #     # Get robot's current goal position
-                    #     goal = action_client.get_goal() # TODO: get_goal method doesn't exist, need to find another way to get the robot's current goal position
-                    #     goal = goal.target_pose.pose.position
-                    #     goal = (goal.x, goal.y)
-                    #     print("Goal: " + str(goal))
-                    #     print("Goal kriging variance: " + str(self.kriging_variance[int(goal[1]), int(goal[0])]))
-                    #     print("Threshold: " + str(kriging_variance_threshold) + "\n")
-                    #     # Check if the task's kriging variance is less than the median of positive kriging variance values
-                    #     if self.kriging_variance[int(goal[1]), int(goal[0])] < (kriging_variance_threshold * 4):
-                    #         # Cancel the task and remove it from the robot's task queue
-                    #         action_client.cancel_all_goals()
-                    #         self.robot_task_queues[robot].remove(goal)
-                    #         rospy.loginfo("Active task cancelled and dropped from " + robot + "'s task queue: " + str(goal))
-                    
             
             if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
                 rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
