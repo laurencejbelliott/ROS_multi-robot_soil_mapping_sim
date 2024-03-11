@@ -24,10 +24,16 @@ def metrics_from_bag(bag_path, bag_folder_path):
     try:
         rmse_df = pd.read_csv(rmse_msg)
         print("Last step kriging RMSE: " + str(rmse_df.iloc[-1].data))
+        # If RMSE is greater than 100, skip metrics for this bag file (erroneous kriging interpolation due to PyKrige bug)
+        if rmse_df.iloc[-1].data > 100:
+            print("Skipping metrics for this bag file...")
+            return
     except ValueError:
         print("No data for kriging RMSE")
         rmse_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
         print("Last step kriging RMSE: " + str(rmse_df.iloc[-1].data))
+        print("Skipping metrics for this bag file...")
+        return
 
     # Get last step mean kriging variance
     avgVar_msg = b.message_by_topic('/coordinator/avgVar')
