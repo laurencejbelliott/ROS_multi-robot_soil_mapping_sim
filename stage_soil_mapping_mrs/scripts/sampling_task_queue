@@ -35,7 +35,7 @@ myargv = rospy.myargv(argv=sys.argv)
 if len(myargv) > 1:
     trial_name = myargv[1]
 
-    rospy.loginfo("Trial name: " + trial_name)
+    rospy.loginfo("Trial name (sampling_task_queue): " + trial_name)
 
 # Simplified navigation - teleports the robots to the goal positions after a delay calculated from the distance to the
 # goal and a constant velocity, this may be used to enable faster simulation, as move_base bottlenecked sim performance.

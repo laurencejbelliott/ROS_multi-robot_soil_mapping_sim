@@ -72,6 +72,7 @@ for trial_params in combinations:
 
     # Check if trial has already run by checking if rosbag file exists
     bag_name = str(bid_function)+'_drop_low_var_tasks_'+str(drop_low_variance_tasks)+'_'+str(trial_num)
+    trial_name = bag_name
     figures_path = package_path+'/figures/'+bag_name
     
     if exists(package_path+'/bags/'+bag_name+'.bag'):
@@ -92,7 +93,8 @@ for trial_params in combinations:
                 'simulator:='+simulator,
                 'bid_function:='+bid_function,
                 'use_queue_sorting:='+str(use_queue_sorting),
-                'drop_low_variance_tasks:='+str(drop_low_variance_tasks)
+                'drop_low_variance_tasks:='+str(drop_low_variance_tasks),
+                'trial_name:="'+trial_name+'"'
                 ]
     roslaunch_args = cli_args[1:]
     roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args)[0], roslaunch_args)]

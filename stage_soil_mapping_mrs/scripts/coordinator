@@ -70,7 +70,7 @@ avg_queue_cost_times = []
 avg_queue_sort_times = []
 
 class Coordinator:
-    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks):
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks, trial_name):
         rospy.init_node(node_name, anonymous=True)
         rospy.loginfo("Coordinator node initialised")
         
@@ -92,7 +92,9 @@ class Coordinator:
         self.bid_function = bid_function # "euclidean_distance", "euclidean_distance_with_insertion", "distance_over_variance", "distance_over_variance_with_insertion", "insertion_weighted_euclidean_distance", "insertion_weighted_distance_over_variance"
         self.sort_tasks = use_queue_sorting # Sort tasks in task queue to minimise distance travelled by robot
         self.drop_low_variance_tasks = drop_low_variance_tasks # Drop tasks with low kriging variance from task queue
+        self.trial_name = trial_name # Name of trial, used for bag file name and log file names
 
+        rospy.loginfo("Trial name (coordinator): " + self.trial_name)
 
         # If root of figures path doesn't exist, create it
         figures_path_root = self.figures_path.split('/')[:-1]
@@ -947,8 +949,9 @@ if __name__ == '__main__':
         bid_function = myargv[8]
         use_queue_sorting = myargv[9]
         drop_low_variance_tasks = myargv[10]
+        trial_name = myargv[11]
 
-        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks)
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks, trial_name)
     else:
         rospy.logerr("No args provided")
         sys.exit(1)
