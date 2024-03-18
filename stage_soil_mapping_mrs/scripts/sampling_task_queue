@@ -6,7 +6,7 @@ import actionlib
 import pickle
 import copy
 import os
-import json
+import sys
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String, Float32MultiArray
 from geometry_msgs.msg import Pose
@@ -27,6 +27,15 @@ rospy.init_node(node_name)
 namespace = rospy.get_namespace()
 robot_name = namespace.strip("/")
 print(namespace)
+
+trial_name = "test_run"
+
+# Get command line arguments
+myargv = rospy.myargv(argv=sys.argv)
+if len(myargv) > 1:
+    trial_name = myargv[1]
+
+    rospy.loginfo("Trial name: " + trial_name)
 
 # Simplified navigation - teleports the robots to the goal positions after a delay calculated from the distance to the
 # goal and a constant velocity, this may be used to enable faster simulation, as move_base bottlenecked sim performance.
@@ -180,13 +189,13 @@ def pub_mock_pen_reading(goal):
     # Save task log to CSV file, with robot_id in filename
     # First check if the logs directory exists, if not, create it
     try:
-        os.makedirs(package_path + '/logs/test_run/')
+        os.makedirs(package_path + '/logs/'+trial_name+'/')
     except FileExistsError:
         pass
 
     # Save the file
-    task_log.to_csv(package_path + '/logs/test_run/task_log_' + namespace[1:-1] + '.csv')
-    rospy.loginfo("Task log saved to " + package_path + '/logs/test_run/task_log_' + namespace[1:-1] + '.csv')
+    task_log.to_csv(package_path + '/logs/'+trial_name+'/task_log_' + namespace[1:-1] + '.csv')
+    rospy.loginfo("Task log saved to " + package_path + '/logs/'+trial_name+'/task_log_' + namespace[1:-1] + '.csv')
 
     # rospy.loginfo("Task log:\n" + str(task_log))
 
