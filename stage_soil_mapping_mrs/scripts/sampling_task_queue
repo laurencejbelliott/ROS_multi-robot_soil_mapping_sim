@@ -186,6 +186,9 @@ def pub_mock_pen_reading(goal):
     global task_log
     task_log = pd.DataFrame.from_dict(tasks, orient='index')
 
+    # Name index column as 'task_position'
+    task_log.index.name = 'task_position'
+
     # Save task log to CSV file, with robot_id in filename
     # First check if the logs directory exists, if not, create it
     try:
