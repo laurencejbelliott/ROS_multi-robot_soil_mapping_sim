@@ -1,2 +1,3 @@
 .vscode
 CMakeLists.txt
+stage_soil_mapping_mrs/bags/*

@@ -2,6 +2,7 @@
 __author__ = "Laurence Roberts-Elliott"
 
 import numpy as np
+import pandas as pd
 import pickle
 import rospy
 import rospkg
@@ -146,6 +147,10 @@ class Coordinator:
         self.RMSEpub = rospy.Publisher(namespace + node_name + "/" + "RMSE", Float64, queue_size=0, tcp_nodelay=True, latch=True)
         self.avgVar = -1
         self.avgVarpub = rospy.Publisher(namespace + node_name + "/" + "avgVar", Float64, queue_size=0, tcp_nodelay=True, latch=True)
+
+        # Per-interpolation data logging dataframe 
+        task_log = pd.DataFrame(columns=['Interpolation Start Time', 'RMSE', 'Mean Kriging Variance', 'Tasks Created', 'Bids', 'Task Allocations', 'Interpolation Execution Time (ms)'])
+        interpolations = {} # Dict to store information associated with each round of kriging interpolation for logging
 
         # Initialise kriging maps
         self.interpolated_map = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1

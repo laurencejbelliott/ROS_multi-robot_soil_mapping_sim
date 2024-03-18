@@ -1,2 +1,2 @@
-,robot_id,x,y,allocation_time,insertion_ix,task_queue_length,start_time,end_time,exec_time,reading
-"(321, 103)",robot_2,321.59763703436903,103.51744463989365,14.030327557,0,0,14.331354855,NaN,NaN,814.6370604080766
+task_position,robot_id,x,y,allocation_time,insertion_ix,task_queue_length,start_time,end_time,exec_time,reading
+"(321, 103)",robot_2,321.59763703436903,103.51744463989365,12.919095991,0,0,13.267163275,NaN,NaN,814.6370604080766
