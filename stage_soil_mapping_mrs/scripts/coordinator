@@ -486,7 +486,7 @@ class Coordinator:
                                 min_cost_index = i
 
                         min_cost_indices.append(min_cost_index)
-                        bid = min_cost * ((min_cost_index + 1)*1)
+                        bid = min_cost * (min_cost_index + 1)
 
                     # Calculate bid as cost of path between robot and new task (Euclidean distance * robot speed)
                     elif self.bid_function == "euclidean_distance":
@@ -523,7 +523,7 @@ class Coordinator:
                                 min_cost = cost
                                 min_cost_index = i
                         min_cost_indices.append(min_cost_index)
-                        bid = min_cost * ((min_cost_index + 1)*1)
+                        bid = min_cost * (min_cost_index + 1)
                     bids.append(bid)
                 
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
