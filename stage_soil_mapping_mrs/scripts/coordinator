@@ -13,6 +13,7 @@ import os
 import copy
 import operator
 import shutil
+import time
 import cv2
 import actionlib
 from math import sqrt, floor
@@ -149,8 +150,13 @@ class Coordinator:
         self.avgVarpub = rospy.Publisher(namespace + node_name + "/" + "avgVar", Float64, queue_size=0, tcp_nodelay=True, latch=True)
 
         # Per-interpolation data logging dataframe 
-        task_log = pd.DataFrame(columns=['Interpolation Start Time', 'RMSE', 'Mean Kriging Variance', 'Tasks Created', 'Bids', 'Task Allocations', 'Interpolation Execution Time (ms)'])
-        interpolations = {} # Dict to store information associated with each round of kriging interpolation for logging
+        self.interpolation_log = pd.DataFrame(columns=['RMSE',
+                                                       'Mean Kriging Variance',
+                                                       'Tasks Created',
+                                                       'Bids',
+                                                       'Task Allocations',
+                                                       'Interpolation Execution Time (ms)'])
+        self.interpolations = {} # Dict to store information associated with each round of kriging interpolation for logging
 
         # Initialise kriging maps
         self.interpolated_map = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
@@ -722,6 +728,9 @@ class Coordinator:
 
             # Run interpolation of sampled points
             rospy.loginfo("Interpolating, please wait...")
+            interpolation_start_ros_time = rospy.get_time()
+            interpolation_start_wall_time = time.time()
+
             m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
 
             self.interpolated_map, self.kriging_variance = m, v
@@ -752,6 +761,16 @@ class Coordinator:
             # Calculate interpolation metrics
             self.RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
             self.avgVar = np.mean(v)
+
+            # Populate interpolation data dictionary
+            self.interpolations[str(interpolation_start_ros_time)] = {
+                "RMSE": self.RMSE,
+                "Mean Kriging Variance": self.avgVar,
+                "Tasks Created": {}, # Need to add tasks to this, for now set a placeholder value
+                "Bids": {}, # Need to add bids to this, for now set a placeholder value
+                "Task Allocations": {}, # Need to add bids to this, for now set a placeholder value
+                "Interpolation Execution Time": time.time() - interpolation_start_wall_time
+            }
 
             rospy.loginfo("Interpolation complete")
             
