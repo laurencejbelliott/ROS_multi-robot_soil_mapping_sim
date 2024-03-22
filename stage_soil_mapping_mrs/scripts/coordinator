@@ -426,6 +426,12 @@ class Coordinator:
         for _ in range(len(self.tasks)):
             if len(self.tasks) > 0:
                 task = self.tasks.pop(0)
+
+                try:
+                    self.interpolations[str(self.numSamples)]["Bids"][str(task)] = {}
+                except KeyError:
+                    pass
+
                 bids = []
                 min_cost_indices = []
                 for robot in self.robots:
@@ -537,6 +543,12 @@ class Coordinator:
                                 min_cost_index = i
                         min_cost_indices.append(min_cost_index)
                         bid = min_cost * (min_cost_index + 1)
+
+                    # Add bids to interpolation log (key of bids dict is the task (x,y) position, value is a dict with robot IDs as keys and bids as values)
+                    try:
+                        self.interpolations[str(self.numSamples)]["Bids"][str(task)]["robot_" + str(self.robots.index(robot))] = bid
+                    except KeyError:
+                        pass
                     bids.append(bid)
                 
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
@@ -600,6 +612,13 @@ class Coordinator:
         # Publish task allocations to robots
         rospy.loginfo("Publishing task allocations to robots:")
         rospy.loginfo(task_allocations)
+
+        # Log task allocations in interpolation log
+        try:
+            self.interpolations[str(self.numSamples)]["Task Allocations"] = task_allocations
+        except KeyError:
+            pass
+
         for robot in self.robots:
             if self.ta_algo == "SSI" and len(task_allocations[robot]) > 0 and type(task_allocations[robot][0]) != tuple:
                 new_task_topic = "/" + robot + "/sampling_task_queue/insert_goal"
@@ -728,8 +747,8 @@ class Coordinator:
 
             # Run interpolation of sampled points
             rospy.loginfo("Interpolating, please wait...")
-            interpolation_start_ros_time = rospy.get_time()
-            interpolation_start_wall_time = time.time()
+            self.interpolation_start_ros_time = rospy.get_time()
+            self.interpolation_start_wall_time = time.time()
 
             m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
 
@@ -763,13 +782,13 @@ class Coordinator:
             self.avgVar = np.mean(v)
 
             # Populate interpolation data dictionary
-            self.interpolations[str(interpolation_start_ros_time)] = {
+            self.interpolations[str(self.numSamples)] = {
                 "RMSE": self.RMSE,
                 "Mean Kriging Variance": self.avgVar,
-                "Tasks Created": {}, # Need to add tasks to this, for now set a placeholder value
-                "Bids": {}, # Need to add bids to this, for now set a placeholder value
-                "Task Allocations": {}, # Need to add bids to this, for now set a placeholder value
-                "Interpolation Execution Time": time.time() - interpolation_start_wall_time
+                "Tasks Created": [],
+                "Bids": {},
+                "Task Allocations": {},
+                "Interpolation Execution Time": time.time() - self.interpolation_start_wall_time
             }
 
             rospy.loginfo("Interpolation complete")
@@ -840,6 +859,8 @@ class Coordinator:
         return pose
     
     def new_sample_callback(self, data):
+        self.numSamples += 1
+
         # Generate new sampling goals
         print("Setting sim. speed to 1x while processing new sample...")
 
@@ -932,6 +953,12 @@ class Coordinator:
                 self.tasks = np.delete(self.tasks, tasks_to_drop_indices, axis=0)
                 self.tasks = self.tasks.tolist()
                 rospy.loginfo("Remaining new tasks: " + str(self.tasks))
+
+            if len(self.tasks) > 0:
+                try:
+                    self.interpolations[str(self.numSamples)]["Tasks Created"] = [tuple(task) for task in self.tasks]
+                except KeyError:
+                    pass
             
             if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
                 rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
@@ -939,7 +966,24 @@ class Coordinator:
             if "SSI" in str(self.ta_algo).upper():
                 rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
                 self.publish_ta(self.ssi_ta())
-        self.numSamples += 1
+        
+        self.interpolation_log = pd.DataFrame.from_dict(self.interpolations, orient='index')
+
+        # Name index column as 'interpolation_time'
+        self.interpolation_log.index.name = 'Samples'
+
+        # Save task log to CSV file, with robot_id in filename
+        # First check if the logs directory exists, if not, create it
+        try:
+            os.makedirs(package_path + '/logs/'+self.trial_name+'/')
+        except FileExistsError:
+            pass
+
+        # Save the file
+        self.interpolation_log.to_csv(package_path + '/logs/'+self.trial_name+'/interpolation_log.csv')
+        rospy.loginfo("Interpolation log saved to " + package_path + '/logs/'+self.trial_name+'/interpolation_log.csv')
+        
+        # self.numSamples += 1
 
         if self.sampling_algo.lower() == "dynamic":
             # Check if all cells of the course-grain sampling grid have been sampled
