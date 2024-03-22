@@ -150,7 +150,8 @@ class Coordinator:
         self.avgVarpub = rospy.Publisher(namespace + node_name + "/" + "avgVar", Float64, queue_size=0, tcp_nodelay=True, latch=True)
 
         # Per-interpolation data logging dataframe 
-        self.interpolation_log = pd.DataFrame(columns=['RMSE',
+        self.interpolation_log = pd.DataFrame(columns=['Interpolation Start Time',
+                                                       'RMSE',
                                                        'Mean Kriging Variance',
                                                        'Tasks Created',
                                                        'Bids',
@@ -783,6 +784,7 @@ class Coordinator:
 
             # Populate interpolation data dictionary
             self.interpolations[str(self.numSamples)] = {
+                'Interpolation Start Time': self.interpolation_start_ros_time,
                 "RMSE": self.RMSE,
                 "Mean Kriging Variance": self.avgVar,
                 "Tasks Created": [],
