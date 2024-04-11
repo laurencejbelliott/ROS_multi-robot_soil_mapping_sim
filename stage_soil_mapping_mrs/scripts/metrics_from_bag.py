@@ -178,11 +178,10 @@ def metrics_from_bag(bag_path, bag_folder_path):
             total_idle_time_df = pd.DataFrame(columns=['Time', 'data'], data=[[np.nan, np.nan]])
 
         # Ignore value if 0 or NaN
-        if total_idle_time_df.iloc[-1].data != 0 or not np.isnan(total_idle_time_df.iloc[-1].data):
-            global_total_idle_time += total_idle_time_df.iloc[-1].data
-        else:
+        if (total_idle_time_df.iloc[-1].data == 0) or (np.isnan(total_idle_time_df.iloc[-1].data)):
             print("Ignoring " + name + ", 0 or NaN total idle time")
-            global_total_idle_time += 0
+        else:
+            global_total_idle_time += total_idle_time_df.iloc[-1].data
 
         # Get last step robot mean_task_completion_time
         mean_task_completion_time_msg = b.message_by_topic('/' + name + 
@@ -195,11 +194,10 @@ def metrics_from_bag(bag_path, bag_folder_path):
 data=[[np.nan, np.nan]])
 
         # Ignore value if 0 or NaN
-        if mean_task_completion_time_df.iloc[-1].data != 0 or not np.isnan(mean_task_completion_time_df.iloc[-1].data):
-            global_total_task_completion_time += mean_task_completion_time_df.iloc[-1].data
-        else:
+        if (mean_task_completion_time_df.iloc[-1].data == 0) or (np.isnan(mean_task_completion_time_df.iloc[-1].data)):
             print("Ignoring " + name + ", 0 or NaN mean task completion time")
-            global_total_task_completion_time += 0
+        else:
+            global_total_task_completion_time += mean_task_completion_time_df.iloc[-1].data
 
         # Get last step robot TA fairness
         TA_fairness_msg = b.message_by_topic('/' + name + '/coordinator/ta_fairness')
@@ -214,7 +212,6 @@ data=[[np.nan, np.nan]])
             global_TA_fairness += TA_fairness_df.iloc[-1].data
         else:
             print("Ignoring " + name + ", 0 or NaN TA fairness")
-            global_TA_fairness += 0
 
         # Get last step robot tasks count
         robot_tasks_count_msg = b.message_by_topic('/' + name + 
@@ -231,7 +228,6 @@ np.nan]])
             global_robot_tasks_count += robot_tasks_count_df.iloc[-1].data
         else:
             print("Ignoring " + name + ", 0 or NaN tasks count")
-            global_robot_tasks_count += 0
 
         # Get last step robot goal queue length
         goal_queue_length_msg = b.message_by_topic('/' + name + '/metrics/goal_queue_length')
@@ -247,7 +243,6 @@ np.nan]])
             global_goal_queue_length += goal_queue_length_df.iloc[-1].data
         else:
             print("Ignoring " + name + ", 0 or NaN goal queue length")
-            global_goal_queue_length += 0
 
         # Get last step robot max goal queue length
         max_goal_queue_length_msg = b.message_by_topic('/' + name + 
@@ -264,7 +259,6 @@ np.nan]])
             global_max_goal_queue_length += max_goal_queue_length_df.iloc[-1].data
         else:
             print("Ignoring " + name + ", 0 or NaN max goal queue length")
-            global_max_goal_queue_length += 0
 
 
     print("Global metrics:")
@@ -406,7 +400,8 @@ ignore_index=True)
 if __name__ == '__main__':
     # Get the path to the bag file
     rp = RosPack()
-    bag_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/metrics.bag'
+    # bag_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/metrics.bag'
+    bag_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/distance_over_variance_drop_low_var_tasks_True_1.bag'
     bag_folder_path = rp.get_path('stage_soil_mapping_mrs') + '/bags/'
 
     metrics_from_bag(bag_path, bag_folder_path)
