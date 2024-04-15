@@ -22,14 +22,10 @@ print(csv_files)
 # conditions = ["distance_over_variance_with_insertion_use_queue_sorting_False"]
 # conditions = ["distance_over_variance_with_insertion_drop_low_var_tasks_half_med_var_True"]
 conditions = [
-    "distance_over_variance_drop_low_var_tasks_False_half_thresh",
-    "distance_over_variance_drop_low_var_tasks_True_half_thresh",
-    "distance_over_variance_with_insertion_drop_low_var_tasks_False_half_thresh",
-    "distance_over_variance_with_insertion_drop_low_var_tasks_True_half_thresh",
-    "euclidean_distance_drop_low_var_tasks_False_half_thresh",
-    "euclidean_distance_drop_low_var_tasks_True_half_thresh",
-    "euclidean_distance_with_insertion_drop_low_var_tasks_False_half_thresh",
-    "euclidean_distance_with_insertion_drop_low_var_tasks_True_half_thresh"]
+    "distance_over_variance_drop_low_var_tasks_True",
+    "distance_over_variance_with_insertion_drop_low_var_tasks_True",
+    "euclidean_distance_with_insertion_drop_low_var_tasks_False"
+]
 
 # Filter the list of CSV files to only include those that match the conditions
 csv_files = [file for file in csv_files if any(condition in file for condition in conditions)]
@@ -73,14 +69,14 @@ for condition in conditions:
         # Get the rows where the column "Metric" is equal to the current metric
         metric_df = condition_df.loc[condition_df['Metric'] == metric]
         
-        # Exclude outliers in current metric
-        # Calculate Q1 and Q3
-        Q1 = metric_df['Value'].quantile(0.25)
-        Q3 = metric_df['Value'].quantile(0.75)
-        # Calculate IQR
-        IQR = Q3 - Q1
-        # Filter out outliers
-        metric_df = metric_df[(metric_df['Value'] >= 0) & (metric_df['Value'] < 500)]
+        # # Exclude outliers in current metric
+        # # Calculate Q1 and Q3
+        # Q1 = metric_df['Value'].quantile(0.25)
+        # Q3 = metric_df['Value'].quantile(0.75)
+        # # Calculate IQR
+        # IQR = Q3 - Q1
+        # # Filter out outliers
+        # metric_df = metric_df[(metric_df['Value'] >= 0) & (metric_df['Value'] < 500)]
 
         
         # Calculate the mean of the "Value" column

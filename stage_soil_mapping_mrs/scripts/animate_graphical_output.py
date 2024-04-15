@@ -47,10 +47,11 @@ if __name__ == '__main__':
     package_path = rp.get_path('stage_soil_mapping_mrs')
 
     conditions = [
-        "distance_times_variance_drop_low_var_tasks_True_half_thresh",
-        "distance_times_variance_with_insertion_drop_low_var_tasks_True_half_thresh"
+        "distance_over_variance_drop_low_var_tasks_True",
+        "distance_over_variance_with_insertion_drop_low_var_tasks_True",
+        "euclidean_distance_with_insertion_drop_low_var_tasks_False"
     ]
-    num_trials = 10
+    num_trials = 1
     
     for condition in conditions:
         for i in range(1, num_trials+1):

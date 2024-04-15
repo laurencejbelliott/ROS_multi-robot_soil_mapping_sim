@@ -17,7 +17,7 @@ num_robots = 3
 ta_algo = "SSI"
 sampling_algo = "random"
 env_crop_factor = 1 # Environment cropping is not yet implemented
-sampling_time_budget = 240 # seconds, as in Mesa sim trials
+sampling_time_budget = 480 # seconds, as in Mesa sim trials
 figures_path = package_path+'/figures/"'
 simulator = "virtual_robots"
 bid_function = "euclidean_distance_with_insertion"
@@ -26,7 +26,7 @@ drop_low_variance_tasks = True
 
 
 # Define sets of parameters to combine
-trial_num_set = set([i for i in range(1, 11)])
+trial_num_set = set([i for i in range(1, 2)])
 print("Set of trial numbers: ", trial_num_set)
 
 num_robots_set = set([num_robots])
@@ -42,17 +42,17 @@ print("Set of sampling algorithms: ", sampling_algo_set)
 env_crop_factor_set = set([env_crop_factor])
 print("Set of environment cropping factors: ", env_crop_factor_set)
 
-# bid_function_set = set(["euclidean_distance", "euclidean_distance_with_insertion, distance_over_variance, distance_over_variance_with_insertion"])
-# bid_function_set = set(["distance_over_variance", "distance_over_variance_with_insertion", "euclidean_distance_with_insertion"])
-bid_function_set = set(["distance_over_variance", "distance_over_variance_with_insertion", "euclidean_distance"])
+# bid_function_set = set(["euclidean_distance_with_insertion"])
+# bid_function_set = set(["distance_over_variance_with_insertion"])
+bid_function_set = set(["distance_over_variance"])
 print("Set of bid functions: ", bid_function_set)
 
 # use_queue_sorting_set = set([True, False])
 use_queue_sorting_set = set([False])
 print("Set of use_queue_sorting states: ", use_queue_sorting_set)
 
-drop_low_variance_tasks_set = set([True, False])
-# drop_low_variance_tasks_set = set([True])
+drop_low_variance_tasks_set = set([True])
+# drop_low_variance_tasks_set = set([False])
 print("Set of drop_low_variance_tasks states: ", drop_low_variance_tasks_set)
 
 # Create all combinations of trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor
@@ -75,7 +75,7 @@ for trial_params in combinations:
     drop_low_variance_tasks = trial_params[7]
 
     # Check if trial has already run by checking if rosbag file exists
-    bag_name = str(bid_function)+'_drop_low_var_tasks_'+str(drop_low_variance_tasks)+'_half_thresh_'+str(trial_num)
+    bag_name = str(bid_function)+'_drop_low_var_tasks_'+str(drop_low_variance_tasks)+'_'+str(trial_num)
     trial_name = bag_name
     figures_path = package_path+'/figures/'+bag_name
     
