@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import roslaunch
 import rospy
+import os
+from os.path import exists
 from rospkg import RosPack
 from roslaunch.parent import ROSLaunchParent
 from std_msgs.msg import Bool
@@ -10,13 +12,18 @@ package_path = rospack.get_path('stage_soil_mapping_mrs')
 
 print(package_path)
 
+# Create bags directory if it does not exist
+bags_dir = package_path + '/bags'
+if not exists(bags_dir):
+    os.makedirs(bags_dir)
+
 trial_num = 3
 num_robots = 3
 ta_algo = "SSI"
 sampling_algo = "dynamic" # "dynamic" or "grid"
 env_crop_factor = 1 # Environment cropping is not yet implemented
 bag_name = "test_run"
-sampling_time_budget = 240 # seconds
+sampling_time_budget = 9999 # seconds
 simulator = "virtual_robots"
 # bid_function = "distance_times_variance"
 bid_function = "distance_over_variance_with_insertion"
