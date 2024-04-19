@@ -91,9 +91,9 @@ colors = ['b', 'g', 'r']
 condition_names = [condition_name.split('/')[-2] for condition_name in bag_paths]
 print("Conditions: " + str(condition_names))
 conditions_shorthand = {
-    "distance_over_variance_with_insertion_drop_low_var_tasks_True_1": "DOVTDCI",
-    "euclidean_distance_with_insertion_drop_low_var_tasks_False_1": "EDCI",
-    "distance_over_variance_drop_low_var_tasks_True_1": "DOVTD"
+    "distance_over_variance_with_insertion_drop_low_var_tasks_True": "DOVTDCI",
+    "euclidean_distance_with_insertion_drop_low_var_tasks_False": "EDCI",
+    "distance_over_variance_drop_low_var_tasks_True": "DOVTD"
 }
 for metric in metrics:
     print("Creating per-metric bar chart of last value for " + metric + "...")
@@ -112,7 +112,7 @@ for metric in metrics:
     # condition_names = [condition_name.split('/')[-2] for condition_name in bag_paths]
     # print("Conditions: " + str(condition_names))
 
-    condition_shorthand_ordered = [conditions_shorthand[condition] for condition in condition_names]
+    condition_shorthand_ordered = [conditions_shorthand[condition[:-2]] for condition in condition_names]
     
     plt.bar(condition_shorthand_ordered, last_values, color=colors)
     plt.ylabel(metric)
