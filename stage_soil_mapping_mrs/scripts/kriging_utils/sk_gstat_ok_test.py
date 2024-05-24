@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from kriging import predict_by_kriging
+from sk_gstat_ok import predict_by_kriging
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -11,7 +11,7 @@ y_arr = [1, 9,   2, 5,   3, 6,   4, 5, 6, 4  ]
 o_arr = [3, 4.2, 4, 4.5, 5, 5.5, 5, 2, 1, 3.3]
 
 # Plot the data for comparison with the kriging prediction
-figs_dir = "./pykrige_outputs/"
+figs_dir = "./skgstat_outputs/"
 
 plt.figure('Data')
 plt.scatter(x_arr, y_arr, c=o_arr)

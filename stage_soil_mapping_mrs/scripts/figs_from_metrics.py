@@ -46,6 +46,10 @@ for bag_path in bag_paths:
         # Ignore values equal to -1
         data = data[data['data'] != -1]
 
+        # If metric is RMSE or mean kriging variance, drop extremely high values
+        if metric_name == "coordinator-RMSE" or metric_name == "coordinator-avgVar":
+            data = data[data['data'] < 50]
+
         plt.plot(data['Time'], data['data'])
         plt.xlabel("Time (s)")
         plt.ylabel(metric_name)
@@ -72,7 +76,7 @@ for metric in metrics:
 
         # If metric is RMSE or mean kriging variance, drop extremely high values
         if metric == "coordinator-RMSE" or metric == "coordinator-avgVar":
-            data = data[data['data'] < 1000]
+            data = data[data['data'] < 50]
 
         # print(data)
         plt.plot(data['Time'], data['data'])
@@ -93,6 +97,7 @@ print("Conditions: " + str(condition_names))
 conditions_shorthand = {
     "distance_over_variance_with_insertion_drop_low_var_tasks_True": "DOVTDCI",
     "euclidean_distance_with_insertion_drop_low_var_tasks_False": "EDCI",
+    "euclidean_distance_with_insertion_drop_low_var_tasks_True": "EDCITD",
     "distance_over_variance_drop_low_var_tasks_True": "DOVTD"
 }
 for metric in metrics:
