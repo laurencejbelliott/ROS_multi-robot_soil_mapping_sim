@@ -44,7 +44,7 @@ def predict_by_kriging(gridx, gridy, x_arr, y_arr, o_arr, variogram='spherical')
     ymin = np.min(y_arr); ymax = np.max(y_arr)               # range of y values
 
     xsiz = 1; ysiz = 1                    # cell size
-    nx = xmax; ny = ymax               # number of cells
+    nx = int(xmax); ny = int(ymax)               # number of cells
     xmn = 0; ymn = 0                        # grid origin, location center of lower left cell
 
     cmap = plt.cm.viridis                    # color map
