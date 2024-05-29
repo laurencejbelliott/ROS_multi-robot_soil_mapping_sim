@@ -28,6 +28,7 @@ from move_base_msgs.msg import MoveBaseGoal
 from stage_soil_mapping_mrs.msg import InsertTask, Map, Row
 from shapely.geometry import MultiPoint
 from move_base_msgs.msg import MoveBaseAction
+from numpy.linalg import LinAlgError
 import matplotlib
 matplotlib.use('Agg')
 
@@ -397,7 +398,7 @@ class Coordinator:
         # Calculate cost of task queue as sum of Euclidean distances between each task
         cost = 0
         for i in range(len(task_queue) - 1):
-            cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) / (self.kriging_variance[int(task_queue[i][1]), int(task_queue[i][0])]*0.5)
+            cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) / (self.kriging_variance[int(task_queue[i][1]), int(task_queue[i][0])]*1)
         return cost
     
     def rr_ta(self):  # Round Robin Task Allocation
@@ -523,7 +524,7 @@ class Coordinator:
                         robot_task_queue = self.robot_task_queues[robot]
                         for i in range(len(robot_task_queue) + 1):
                             task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
-                            cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*0.5)
+                            cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
                             cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
                             if cost < min_cost:
                                 min_cost = cost
@@ -537,7 +538,7 @@ class Coordinator:
                         robot_task_queue = self.robot_task_queues[robot]
                         for i in range(len(robot_task_queue) + 1):
                             task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
-                            cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*0.5)
+                            cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
                             cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
                             if cost < min_cost:
                                 min_cost = cost
@@ -753,52 +754,67 @@ class Coordinator:
 
             m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
 
-            self.interpolated_map, self.kriging_variance = m, v
-
-            # Create Map for raw kriging interpolation data
-            interpolated_map_ros_raw = Map()
-            for row in self.interpolated_map:
-                interpolated_map_ros_raw.row.append(Row(list(row)))
-
-            # Create Map for raw kriging variance data
-            kriging_variance_ros_raw = Map()
-            for row in self.kriging_variance:
-                kriging_variance_ros_raw.row.append(Row(list(row)))
-
-            self.interpolated_map_raw_pub.publish(interpolated_map_ros_raw)
-            self.kriging_variance_raw_pub.publish(kriging_variance_ros_raw)
-
-            # Publish interpolation maps
-            interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
-            kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
-
-            interpolated_map_ros = self.normalise_occupancy_grid_for_rviz(interpolated_map_ros)
-            kriging_variance_ros = self.normalise_occupancy_grid_for_rviz(kriging_variance_ros)
-
-            self.interpolated_map_pub.publish(interpolated_map_ros)
-            self.kriging_variance_pub.publish(kriging_variance_ros)
-
             # Calculate interpolation metrics
-            self.RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
-            self.avgVar = np.mean(v)
+            RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
+            avgVar = np.mean(v)
 
-            # Populate interpolation data dictionary
-            self.interpolations[str(self.numSamples)] = {
-                'Interpolation Start Time': self.interpolation_start_ros_time,
-                "RMSE": self.RMSE,
-                "Mean Kriging Variance": self.avgVar,
-                "Tasks Created": [],
-                "Bids": {},
-                "Task Allocations": {},
-                "Interpolation Execution Time": time.time() - self.interpolation_start_wall_time
-            }
+            interpolation_successful = True
 
-            rospy.loginfo("Interpolation complete")
-            
+            # Check if mean variance is not extremely high (this can sometimes happen due to a bug in the kriging library)
+            if (avgVar < -1) or (abs(avgVar) <= 800):
+                try:
+                    self.RMSE = RMSE
+                    self.avgVar = avgVar
+
+                    self.interpolated_map, self.kriging_variance = m, v
+
+                    # Create Map for raw kriging interpolation data
+                    interpolated_map_ros_raw = Map()
+                    for row in self.interpolated_map:
+                        interpolated_map_ros_raw.row.append(Row(list(row)))
+
+                    # Create Map for raw kriging variance data
+                    kriging_variance_ros_raw = Map()
+                    for row in self.kriging_variance:
+                        kriging_variance_ros_raw.row.append(Row(list(row)))
+
+                    self.interpolated_map_raw_pub.publish(interpolated_map_ros_raw)
+                    self.kriging_variance_raw_pub.publish(kriging_variance_ros_raw)
+
+                    # Publish interpolation maps
+                    interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
+                    kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
+
+                    interpolated_map_ros = self.normalise_occupancy_grid_for_rviz(interpolated_map_ros)
+                    kriging_variance_ros = self.normalise_occupancy_grid_for_rviz(kriging_variance_ros)
+
+                    self.interpolated_map_pub.publish(interpolated_map_ros)
+                    self.kriging_variance_pub.publish(kriging_variance_ros)
+
+                    # Populate interpolation data dictionary
+                    self.interpolations[str(self.numSamples)] = {
+                        'Interpolation Start Time': self.interpolation_start_ros_time,
+                        "RMSE": self.RMSE,
+                        "Mean Kriging Variance": self.avgVar,
+                        "Tasks Created": [],
+                        "Bids": {},
+                        "Task Allocations": {},
+                        "Interpolation Execution Time": time.time() - self.interpolation_start_wall_time
+                    }
+                except LinAlgError:
+                    rospy.logerr("LinAlgError occurred during interpolation")
+                    interpolation_successful = False
+            else:
+                interpolation_successful = False
+
+            if interpolation_successful:
+                rospy.loginfo("Interpolation complete")
+            else:
+                rospy.logwarn("Interpolation incorrect due to PyKrige bug, skipping...")
             print("Setting sim. speed back to " + str(increased_sim_speed) + "x...")
             self.sim_time_factor_pub.publish(increased_sim_speed)
         else:
-            rospy.loginfo("Need at least 3 points to interpolate, we have " + str(len(x_arr)))
+            rospy.loginfo("Need at least 3 samples to interpolate, we have " + str(len(x_arr)))
 
     def numpy_array_to_occupancy_grid(self, numpy_array): # Convert numpy array to OccupancyGrid message
         # Upscale numpy array by 20x for better visualisation
