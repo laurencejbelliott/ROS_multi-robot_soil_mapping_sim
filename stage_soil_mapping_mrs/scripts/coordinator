@@ -23,7 +23,8 @@ from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
 from std_msgs.msg import String, Float64, Int64, Bool
 from nav_msgs.msg import OccupancyGrid
-from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped, Point
+from visualization_msgs.msg import Marker
 from move_base_msgs.msg import MoveBaseGoal
 from stage_soil_mapping_mrs.msg import InsertTask, Map, Row
 from shapely.geometry import MultiPoint
@@ -138,6 +139,24 @@ class Coordinator:
         self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True, queue_size=1)
         self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True, queue_size=1)
         self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
+        self.sample_point_markers_pub = rospy.Publisher("/sample_point_markers", Marker, queue_size=10)
+
+        # Initialise marker
+        self.marker = Marker()
+        self.marker.header.frame_id = "map"
+        self.marker.header.stamp = rospy.Time.now()
+        self.marker.ns = "coordinator"
+        self.marker.id = 0
+        self.marker.type = Marker.POINTS
+        self.marker.action = Marker.ADD
+        self.marker.pose.orientation.w = 1.0
+        self.marker.scale.x = 1.0
+        self.marker.scale.y = 1.0
+        self.marker.color.a = 1.0
+        self.marker.color.r = 1.0
+        self.marker.color.g = 1.0
+        self.marker.color.b = 1.0
+        self.marker.points = []
 
         self.allocated_course_cells = []
         self.ds_grid_mean_kriging_variance = {}
@@ -728,8 +747,18 @@ class Coordinator:
         # rospy.loginfo("Y: " + str(data["y"]))
         # rospy.loginfo("Reading: " + str(data["reading"]))
 
-        x_arr.append([data["x"]])
-        y_arr.append([data["y"]])
+        x = data["x"]
+        y = data["y"]
+
+        p = Point()
+        p.x = x
+        p.y = y
+        p.z = 0
+        self.marker.points.append(p)
+        self.sample_point_markers_pub.publish(self.marker)
+        
+        x_arr.append(x)
+        y_arr.append(y)
         o_arr.append(float(data["reading"]))
         id_arr.append(data["robot_id"])
 
