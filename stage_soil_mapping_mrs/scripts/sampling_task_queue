@@ -9,7 +9,7 @@ import os
 import sys
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import String, Float32MultiArray
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseStamped
 from nav_msgs.msg import Odometry
 from stage_soil_mapping_mrs.msg import InsertTask
 # TODO: Add rospy_message_converter to rosdep dependencies
@@ -59,7 +59,7 @@ task_completion_times_pub = rospy.Publisher(namespace+node_name+"/task_completio
 global current_pose
 
 # Task logging dataframe (task_queue_length is the length of the queue at the time of allocation)
-task_log = pd.DataFrame(columns=['robot_id', 'x', 'y', 'reading', 'allocation_time', 'insertion_ix', 'task_queue_length', 'start_time', 'end_time', 'exec_time'])
+task_log = pd.DataFrame(columns=['robot_id', 'task_x', 'task_y', 'robot_x', 'robot_y', 'reading', 'allocation_time', 'insertion_ix', 'task_queue_length', 'start_time', 'end_time', 'exec_time'])
 tasks = {} # Dict to store task information for logging (each task represented by its own dictionary)
 
 
@@ -80,8 +80,10 @@ def queue_nav_goal_callback(data):
     task_id = str((math.floor(data.target_pose.pose.position.x), math.floor(data.target_pose.pose.position.y)))
     tasks[task_id] = {
         'robot_id': namespace.strip("/"),
-        'x': data.target_pose.pose.position.x,
-        'y': data.target_pose.pose.position.y,
+        'task_x': data.target_pose.pose.position.x,
+        'task_y': data.target_pose.pose.position.y,
+        'robot_x': "NaN",
+        'robot_y': "NaN",
         'allocation_time': rospy.get_time(),
         'insertion_ix': len(goal_queue),
         'task_queue_length': len(goal_queue),
@@ -92,6 +94,11 @@ def queue_nav_goal_callback(data):
         }
     
     goal_queue.append(data)
+
+    # Get robot position from /robot_x/robot_pose topic
+    robot_pose = rospy.wait_for_message(namespace + 'robot_pose', PoseStamped)
+    tasks[task_id]['robot_x'] = robot_pose.pose.position.x
+    tasks[task_id]['robot_y'] = robot_pose.pose.position.y
 
     # Human-readable goal queue
     goal_queue_hr = []
@@ -116,18 +123,25 @@ def insert_nav_goal_callback(data):
     task_id = str((math.floor(goal.target_pose.pose.position.x), math.floor(goal.target_pose.pose.position.y)))
     tasks[task_id] = {
         'robot_id': namespace.strip("/"),
-        'x': goal.target_pose.pose.position.x,
-        'y': goal.target_pose.pose.position.y,
+        'task_x': goal.target_pose.pose.position.x,
+        'task_y': goal.target_pose.pose.position.y,
+        'robot_x': "NaN",
+        'robot_y': "NaN",
         'allocation_time': rospy.get_time(),
         'insertion_ix': index,
         'task_queue_length': len(goal_queue),
         'start_time': "NaN",
         'end_time': "NaN",
         'exec_time': "NaN",
-        'reading': 'NaN'
+        'reading': "NaN"
         }
 
     goal_queue.insert(index, goal)
+
+    # Get robot position from /robot_x/robot_pose topic
+    robot_pose = rospy.wait_for_message(namespace + 'robot_pose', PoseStamped)
+    tasks[task_id]['robot_x'] = robot_pose.pose.position.x
+    tasks[task_id]['robot_y'] = robot_pose.pose.position.y
 
     # Human-readable goal queue
     goal_queue_hr = []
@@ -161,7 +175,6 @@ def pub_mock_pen_reading(goal):
     # If nav. was successful, stop for 5 seconds and read data indexed by position
     rospy.loginfo("Taking penetrometer reading...")
     if use_simplified_nav:
-        # TODO: Calculate this offset as half of the environment size, rather than hard-coding it
         pose_x = goal.target_pose.pose.position.x
         pose_y = goal.target_pose.pose.position.y
         # data_x, data_y = math.floor(pose_x), math.floor(pose_y)
@@ -236,7 +249,7 @@ def queue_nav_goal_listener():
                 # Calculate time to goal
                 current_pose_x = current_pose.position.x
                 current_pose_y = current_pose.position.y
-
+                
                 goal_pose_x = goal.target_pose.pose.position.x
                 goal_pose_y = goal.target_pose.pose.position.y
 
