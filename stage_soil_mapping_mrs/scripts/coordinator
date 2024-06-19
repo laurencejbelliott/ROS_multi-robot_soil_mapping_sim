@@ -417,7 +417,14 @@ class Coordinator:
         # Calculate cost of task queue as sum of Euclidean distances between each task
         cost = 0
         for i in range(len(task_queue) - 1):
-            cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) / (self.kriging_variance[int(task_queue[i][1]), int(task_queue[i][0])]*1)
+            if (self.kriging_variance[int(task_queue[i+1][1]), int(task_queue[i+1][0])]*1) < 0:
+                cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed)
+            else:
+                cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) / (self.kriging_variance[int(task_queue[i+1][1]), int(task_queue[i+1][0])]*1)
+            # print("Cumulative cost up to task " + str(i) + " of " + str(len(task_queue)) + ": " + str(cost))
+            # print("Task: " + str(task_queue[i]) + ". Next task: " + str(task_queue[i+1]))
+            # print("Kriging variance at next task: " + str(self.kriging_variance[int(task_queue[i+1][1]), int(task_queue[i+1][0])] * 1))
+
         return cost
     
     def rr_ta(self):  # Round Robin Task Allocation
