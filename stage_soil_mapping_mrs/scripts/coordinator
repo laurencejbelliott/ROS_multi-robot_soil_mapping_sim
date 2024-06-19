@@ -788,60 +788,69 @@ class Coordinator:
             self.interpolation_start_ros_time = rospy.get_time()
             self.interpolation_start_wall_time = time.time()
 
-            m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
-
-            # Calculate interpolation metrics
-            RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
-            avgVar = np.mean(v)
-
             interpolation_successful = True
-
-            # Check if mean variance is not extremely high (this can sometimes happen due to a bug in the kriging library)
-            if (avgVar < -1) or (abs(avgVar) <= 800):
-                try:
-                    self.RMSE = RMSE
-                    self.avgVar = avgVar
-
-                    self.interpolated_map, self.kriging_variance = m, v
-
-                    # Create Map for raw kriging interpolation data
-                    interpolated_map_ros_raw = Map()
-                    for row in self.interpolated_map:
-                        interpolated_map_ros_raw.row.append(Row(list(row)))
-
-                    # Create Map for raw kriging variance data
-                    kriging_variance_ros_raw = Map()
-                    for row in self.kriging_variance:
-                        kriging_variance_ros_raw.row.append(Row(list(row)))
-
-                    self.interpolated_map_raw_pub.publish(interpolated_map_ros_raw)
-                    self.kriging_variance_raw_pub.publish(kriging_variance_ros_raw)
-
-                    # Publish interpolation maps
-                    interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
-                    kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
-
-                    interpolated_map_ros = self.normalise_occupancy_grid_for_rviz(interpolated_map_ros)
-                    kriging_variance_ros = self.normalise_occupancy_grid_for_rviz(kriging_variance_ros)
-
-                    self.interpolated_map_pub.publish(interpolated_map_ros)
-                    self.kriging_variance_pub.publish(kriging_variance_ros)
-
-                    # Populate interpolation data dictionary
-                    self.interpolations[str(self.numSamples)] = {
-                        'Interpolation Start Time': self.interpolation_start_ros_time,
-                        "RMSE": self.RMSE,
-                        "Mean Kriging Variance": self.avgVar,
-                        "Tasks Created": [],
-                        "Bids": {},
-                        "Task Allocations": {},
-                        "Interpolation Execution Time": time.time() - self.interpolation_start_wall_time
-                    }
-                except LinAlgError:
-                    rospy.logerr("LinAlgError occurred during interpolation")
-                    interpolation_successful = False
-            else:
+            
+            try:
+                m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
+                # Calculate interpolation metrics
+                RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
+                avgVar = np.mean(v)
+            except LinAlgError:
                 interpolation_successful = False
+                rospy.logwarn("LinAlgError occurred, skipping interpolation...")
+                
+
+            
+            if interpolation_successful:
+                # Check if mean variance is not extremely high (this can sometimes happen due to a bug in the kriging library)
+                # if (avgVar < -1) or (abs(avgVar) <= 800):
+                print("Mean kriging variance: " + str(avgVar))
+                if (avgVar > -1):
+                    try:
+                        self.RMSE = RMSE
+                        self.avgVar = avgVar
+
+                        self.interpolated_map, self.kriging_variance = m, v
+
+                        # Create Map for raw kriging interpolation data
+                        interpolated_map_ros_raw = Map()
+                        for row in self.interpolated_map:
+                            interpolated_map_ros_raw.row.append(Row(list(row)))
+
+                        # Create Map for raw kriging variance data
+                        kriging_variance_ros_raw = Map()
+                        for row in self.kriging_variance:
+                            kriging_variance_ros_raw.row.append(Row(list(row)))
+
+                        self.interpolated_map_raw_pub.publish(interpolated_map_ros_raw)
+                        self.kriging_variance_raw_pub.publish(kriging_variance_ros_raw)
+
+                        # Publish interpolation maps
+                        interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
+                        kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
+
+                        interpolated_map_ros = self.normalise_occupancy_grid_for_rviz(interpolated_map_ros)
+                        kriging_variance_ros = self.normalise_occupancy_grid_for_rviz(kriging_variance_ros)
+
+                        self.interpolated_map_pub.publish(interpolated_map_ros)
+                        self.kriging_variance_pub.publish(kriging_variance_ros)
+
+                        # Populate interpolation data dictionary
+                        self.interpolations[str(self.numSamples)] = {
+                            'Interpolation Start Time': self.interpolation_start_ros_time,
+                            "RMSE": self.RMSE,
+                            "Mean Kriging Variance": self.avgVar,
+                            "Tasks Created": [],
+                            "Bids": {},
+                            "Task Allocations": {},
+                            "Interpolation Execution Time": time.time() - self.interpolation_start_wall_time
+                        }
+                    except LinAlgError:
+                        rospy.logwarn("LinAlgError occurred during interpolation")
+                        interpolation_successful = False
+                else:
+                    rospy.logwarn("Extreme mean kriging variance, skipping interpolation...")
+                    interpolation_successful = False
 
             if interpolation_successful:
                 rospy.loginfo("Interpolation complete")
