@@ -803,9 +803,8 @@ class Coordinator:
             
             if interpolation_successful:
                 # Check if mean variance is not extremely high (this can sometimes happen due to a bug in the kriging library)
-                # if (avgVar < -1) or (abs(avgVar) <= 800):
                 print("Mean kriging variance: " + str(avgVar))
-                if (avgVar > -1):
+                if (avgVar > -1) or (abs(avgVar) <= 900):
                     try:
                         self.RMSE = RMSE
                         self.avgVar = avgVar
