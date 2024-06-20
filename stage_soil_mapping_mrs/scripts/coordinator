@@ -975,7 +975,7 @@ class Coordinator:
                     rospy.loginfo("Generating sampling goals with dynamic sampling...")
                     self.tasks += self.dynamic_sampling()
             
-            if self.drop_low_variance_tasks:
+            if self.drop_low_variance_tasks.lower() == "true":
                 # Drop tasks where kriging variance at the task position is less than the median of positive kriging variance values
                 # This is to avoid robots sampling in areas where the kriging variance has become very low
 
@@ -984,7 +984,7 @@ class Coordinator:
                 
                 # Calculate the median of the positive kriging variance values
                 kriging_variance_median = np.median(kriging_variance_positive)
-                kriging_variance_threshold = kriging_variance_median
+                kriging_variance_threshold = kriging_variance_median * 0.75
                 rospy.loginfo("Dropping tasks with kriging variance less than median of positive kriging variance values...")
                 rospy.loginfo("Median positive kriging variance: " + str(kriging_variance_median))
                 rospy.loginfo("Threshold: " + str(kriging_variance_threshold))
