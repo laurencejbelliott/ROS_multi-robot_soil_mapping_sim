@@ -757,6 +757,9 @@ class Coordinator:
         x = data["x"]
         y = data["y"]
 
+        if (x, y) != (self.robot_poses[data['robot_id']].pose.position.x, self.robot_poses[data['robot_id']].pose.position.y):
+            (x, y) = (self.robot_poses[data['robot_id']].pose.position.x, self.robot_poses[data['robot_id']].pose.position.y)
+
         p = Point()
         p.x = x
         p.y = y
