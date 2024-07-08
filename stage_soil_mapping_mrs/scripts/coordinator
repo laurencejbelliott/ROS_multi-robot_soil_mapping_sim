@@ -409,7 +409,6 @@ class Coordinator:
             points.append(max_v_cell)
 
         # rospy.loginfo("New dynamic sampling goals: " + str(points))
-
         return points
 
 
@@ -940,29 +939,36 @@ class Coordinator:
             data_json = json.loads(data_json)
 
             cluster_id = self.ds_grid[int(data_json["x"])][int(data_json["y"])]
-            self.sampled_mask[self.ds_grid_rotated == cluster_id] = -1
+            self.sampled_mask[np.flipud(self.ds_grid_rotated) == cluster_id] = -1
             
-            # # Save visualisation of sampled cells mask
-            # if self.numSamples % 1 == 0: # Save every 1 samples
-            #     plt.imshow(self.sampled_mask)
-            #     plt.title("Sampled Cells Mask")
-            #     plt.colorbar()
-            #     plt.annotate("Min: " + str(np.min(self.sampled_mask)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
-            #     plt.annotate("Max: " + str(np.max(self.sampled_mask)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-            #     plt.savefig(self.figures_path+"/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
-            #     plt.close()
+            # Save visualisation of sampled cells mask
+            if self.numSamples % 1 == 0: # Save every 1 samples
+                plt.imshow(self.sampled_mask, origin='lower')
+                plt.title("Sampled Cells Mask")
+                plt.colorbar()
 
-            #     # Save visualisation of kriging variance with sampled cells mask applied
-            #     variance_masked = self.kriging_variance * self.sampled_mask
-            #     plt.imshow(variance_masked)
-            #     plt.title("Kriging Variance x Sampled Cells Convolution")
-            #     plt.colorbar()
-            #     plt.annotate("Min: " + str(np.min(variance_masked)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
-            #     plt.annotate("Max: " + str(np.max(variance_masked)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-            #     plt.annotate("Mean: " + str(np.mean(variance_masked)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
-            #     plt.annotate("Median: " + str(np.median(variance_masked)), (0, 0), (0, -80), xycoords='axes fraction', textcoords='offset points', va='top')
-            #     plt.savefig(self.figures_path+"/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
-            #     plt.close()
+                # Overlay sampling points scatter plot
+                plt.scatter(x_arr, y_arr, s=10, c='red')
+
+                plt.annotate("Min: " + str(np.min(self.sampled_mask)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Max: " + str(np.max(self.sampled_mask)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.savefig(self.figures_path+"/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
+                plt.close()
+
+                # Save visualisation of kriging variance with sampled cells mask applied
+                variance_masked = self.kriging_variance * self.sampled_mask
+                plt.imshow(variance_masked, origin='lower')
+                plt.title("Kriging Variance x Sampled Cells Convolution")
+                plt.colorbar()
+
+                # Overlay sampling points scatter plot
+                plt.scatter(x_arr, y_arr, s=10, c='red')
+                plt.annotate("Min: " + str(np.min(variance_masked)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Max: " + str(np.max(variance_masked)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Mean: " + str(np.mean(variance_masked)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Median: " + str(np.median(variance_masked)), (0, 0), (0, -80), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.savefig(self.figures_path+"/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
+                plt.close()
 
         self.metricPubNumSamples()
         self.interpolate_and_visualise(data.data)
