@@ -490,7 +490,7 @@ Visualization Manager:
       Axes Length: 1
       Axes Radius: 0.10000000149011612
       Class: rviz/Pose
-      Color: 0; 255; 0
+      Color: 252; 233; 79
       Enabled: true
       Head Length: 1
       Head Radius: 2.5
@@ -506,7 +506,7 @@ Visualization Manager:
       Axes Length: 1
       Axes Radius: 0.10000000149011612
       Class: rviz/Pose
-      Color: 0; 255; 0
+      Color: 245; 121; 0
       Enabled: true
       Head Length: 1
       Head Radius: 2.5
