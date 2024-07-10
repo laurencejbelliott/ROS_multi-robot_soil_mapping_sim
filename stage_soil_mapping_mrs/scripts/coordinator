@@ -401,12 +401,15 @@ class Coordinator:
         for cell_id in goal_cells:
             # Get the indices of the cells in the dynamic sampling grid that belong to the current cell_id
             cell_indices = np.argwhere(self.ds_grid == cell_id)
-            # rospy.loginfo("cell_indices: " + str(cell_indices))
-            kriging_v_rotated = np.rot90(self.kriging_variance)
-            kriging_variance_cropped_to_cell = kriging_v_rotated[cell_indices[:, 0], cell_indices[:, 1]]
-            # rospy.loginfo("kriging_variance_cropped_to_cell: " + str(kriging_variance_cropped_to_cell))
-            max_v_cell = cell_indices[np.unravel_index(kriging_variance_cropped_to_cell.argmax(), kriging_variance_cropped_to_cell.shape)[0]]
-            points.append(max_v_cell)
+            # Crop self.kriging_variance to the current cell_id
+            cell_kriging_variance = self.kriging_variance[np.min(cell_indices[:, 0]):np.max(cell_indices[:, 0]),
+                                                          np.min(cell_indices[:, 1]):np.max(cell_indices[:, 1])]
+            # Get the highest kriging variance cell in the current cell_id
+            highest_kriging_variance_cell = np.argmax(cell_kriging_variance)
+            # Get the x and y coordinates of the highest kriging variance cell
+            point = (cell_indices[highest_kriging_variance_cell][0], cell_indices[highest_kriging_variance_cell][1])
+
+            points.append(point)
 
         # rospy.loginfo("New dynamic sampling goals: " + str(points))
         return points
