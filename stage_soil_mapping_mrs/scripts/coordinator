@@ -402,8 +402,11 @@ class Coordinator:
             # Get the indices of the cells in the dynamic sampling grid that belong to the current cell_id
             cell_indices = np.argwhere(self.ds_grid == cell_id)
             # Crop self.kriging_variance to the current cell_id
-            cell_kriging_variance = self.kriging_variance[np.min(cell_indices[:, 0]):np.max(cell_indices[:, 0]),
-                                                          np.min(cell_indices[:, 1]):np.max(cell_indices[:, 1])]
+            # cell_kriging_variance = self.kriging_variance[np.min(cell_indices[:, 0]):np.max(cell_indices[:, 0]),
+            #                                               np.min(cell_indices[:, 1]):np.max(cell_indices[:, 1])]
+            cell_kriging_variance = self.kriging_variance[np.min(cell_indices[:, 1]):np.max(cell_indices[:, 1]),
+                                                          np.min(cell_indices[:, 0]):np.max(cell_indices[:, 0])]
+
             # Get the highest kriging variance cell in the current cell_id
             highest_kriging_variance_cell = np.argmax(cell_kriging_variance)
             # Get the x and y coordinates of the highest kriging variance cell
