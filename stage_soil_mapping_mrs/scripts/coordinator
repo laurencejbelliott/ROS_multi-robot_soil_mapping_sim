@@ -30,6 +30,7 @@ from stage_soil_mapping_mrs.msg import InsertTask, Map, Row
 from shapely.geometry import MultiPoint
 from move_base_msgs.msg import MoveBaseAction
 from numpy.linalg import LinAlgError
+import matplotlib.colors as mcol
 import matplotlib
 matplotlib.use('Agg')
 
@@ -271,7 +272,10 @@ class Coordinator:
         self.robot_task_queues = {}
         self.robot_tasks_allocated_count = {}
         self.robot_ta_fairnesses = {}
-        
+        self.robot_sample_points = {}
+        self.robot_colours = ['lime', 'yellow', 'orange'] # TODO: Match these with the colours used in RViz, make sure they're distinct from heatmap colours
+        self.br_cm = mcol.LinearSegmentedColormap.from_list("br",["b","r"])
+
         self.robot_tasks_allocated_count_total = 0
         self.robot_tasks_allocated_count_total_pub = rospy.Publisher(namespace + node_name + "/" + "robot_tasks_allocated_count_total", Int64, queue_size=0, tcp_nodelay=True, latch=True)
         self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
@@ -285,6 +289,9 @@ class Coordinator:
         self.robot_task_queue_pubs = {}
         self.robot_action_clients = {}
         for robot in self.robots:
+            # Initialise sample points arrays
+            self.robot_sample_points[robot] = []
+
             # Tasks allocated publishers
             self.robot_tasks_allocated_count[robot] = 0
             self.robot_tasks_allocated_count_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/tasks_allocated_count", Int64, queue_size=0)
@@ -357,11 +364,11 @@ class Coordinator:
         # Create random points to sample
         points = [(np.random.uniform(min(x_grid), max(x_grid)), np.random.uniform(min(y_grid),
                     max(y_grid))) for _ in range(self.num_robots)]
-        plt.imshow(ground_truth, origin="lower")
-        plt.colorbar()
-        # Plot X and Y of tuples
-        plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
-        plt.title("Ground truth with initial random sampling")
+        # plt.imshow(ground_truth, origin="lower")
+        # plt.colorbar()
+        # # Plot X and Y of tuples
+        # plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
+        # plt.title("Ground truth with initial random sampling")
         # plt.savefig(self.figures_path+'/ground_truth_and_random_sampling.png')
         # rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/figures/ground_truth_and_random_sampling.png")
 
@@ -930,6 +937,15 @@ class Coordinator:
     
     def new_sample_callback(self, data):
         self.numSamples += 1
+        
+        # Decode JSON data 
+        data_json = copy.deepcopy(data)
+
+        data_json = str(data_json.data).replace("'", '"')
+        data_json = json.loads(data_json)
+
+        # Append to per-robot sample array
+        self.robot_sample_points[data_json["robot_id"]].append((data_json["x"], data_json["y"]))
 
         # Generate new sampling goals
         print("Setting sim. speed to 1x while processing new sample...")
@@ -939,22 +955,24 @@ class Coordinator:
 
         if self.sampling_algo == "dynamic":
             # Update sampled cells mask
-            data_json = copy.deepcopy(data)
-
-            data_json = str(data_json.data).replace("'", '"')
-            data_json = json.loads(data_json)
+            
 
             cluster_id = self.ds_grid[int(data_json["x"])][int(data_json["y"])]
             self.sampled_mask[np.flipud(self.ds_grid_rotated) == cluster_id] = -1
             
             # Save visualisation of sampled cells mask
             if self.numSamples % 1 == 0: # Save every 1 samples
-                plt.imshow(self.sampled_mask, origin='lower')
+                plt.imshow(self.sampled_mask, origin='lower', cmap=self.br_cm)
                 plt.title("Sampled Cells Mask")
                 plt.colorbar()
 
-                # Overlay sampling points scatter plot
-                plt.scatter(x_arr, y_arr, s=10, c='red')
+                # Overlay per-robot sampling points as scatter plot
+                for robot in self.robots:
+                    robot_sample_points = self.robot_sample_points[robot]
+                    if len(robot_sample_points) > 0:
+                        robot_sample_points = np.array(robot_sample_points)
+                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])])
+                        plt.plot(robot_sample_points[:, 0], robot_sample_points[:, 1], c=self.robot_colours[int(robot.split("_")[1])])
 
                 plt.annotate("Min: " + str(np.round(np.min(self.sampled_mask), 2)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.round(np.max(self.sampled_mask), 2)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
@@ -965,12 +983,19 @@ class Coordinator:
 
                 # Save visualisation of kriging variance with sampled cells mask applied
                 variance_masked = self.kriging_variance * self.sampled_mask
-                plt.imshow(variance_masked, origin='lower')
+                plt.imshow(variance_masked, origin='lower', cmap=self.br_cm)
                 plt.title("Kriging Variance x Sampled Cells Convolution")
                 plt.colorbar()
 
-                # Overlay sampling points scatter plot
-                plt.scatter(x_arr, y_arr, s=10, c='red')
+                # Overlay per-robot sampling points as scatter plot
+                for robot in self.robots:
+                    robot_sample_points = self.robot_sample_points[robot]
+                    if len(robot_sample_points) > 0:
+                        robot_sample_points = np.array(robot_sample_points)
+                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])])
+                        plt.plot(robot_sample_points[:, 0], robot_sample_points[:, 1], c=self.robot_colours[int(robot.split("_")[1])])
+
+
                 plt.annotate("Min: " + str(np.round(np.min(variance_masked), 2)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.round(np.max(variance_masked), 2)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Mean: " + str(np.round(np.mean(variance_masked), 2)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
