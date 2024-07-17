@@ -94,11 +94,11 @@ def figs_from_bag(bag_path):
 
             # Plot robot trajectories
             for robot_name, robot_data in robots.items():
-                ax.plot(robot_data['x'], robot_data['y'], color=robot_data['color'], label=robot_name + ' Trajectory')
+                ax.plot(robot_data['x'], robot_data['y'], color=robot_data['color'])
 
             # Plot sample positions
             for robot_name, robot_data in robots.items():
-                ax.scatter(robot_data['samples_x'], robot_data['samples_y'], color=robot_data['color'], label=robot_name + ' Samples')
+                ax.scatter(robot_data['samples_x'], robot_data['samples_y'], color=robot_data['color'], label=robot_name)
 
             ax.legend()
             # plt.show()
@@ -140,11 +140,11 @@ def figs_from_bag(bag_path):
 
             # Plot robot trajectories
             for robot_name, robot_data in robots.items():
-                ax.plot(robot_data['x'], robot_data['y'], color=robot_data['color'], label=robot_name + ' Trajectory')
+                ax.plot(robot_data['x'], robot_data['y'], color=robot_data['color'])
 
             # Plot sample positions
             for robot_name, robot_data in robots.items():
-                ax.scatter(robot_data['samples_x'], robot_data['samples_y'], color=robot_data['color'], label=robot_name + ' Samples')
+                ax.scatter(robot_data['samples_x'], robot_data['samples_y'], color=robot_data['color'], label=robot_name)
 
             ax.legend()
             # plt.show()

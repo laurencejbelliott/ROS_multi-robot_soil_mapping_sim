@@ -962,7 +962,7 @@ class Coordinator:
             
             # Save visualisation of sampled cells mask
             if self.numSamples % 1 == 0: # Save every 1 samples
-                plt.imshow(self.sampled_mask, origin='lower', cmap=self.br_cm)
+                plt.imshow(self.sampled_mask, origin='lower', cmap="gray")
                 plt.title("Sampled Cells Mask")
                 plt.colorbar()
 
@@ -971,8 +971,10 @@ class Coordinator:
                     robot_sample_points = self.robot_sample_points[robot]
                     if len(robot_sample_points) > 0:
                         robot_sample_points = np.array(robot_sample_points)
-                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])])
+                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])],
+                                    label=robot)
                         plt.plot(robot_sample_points[:, 0], robot_sample_points[:, 1], c=self.robot_colours[int(robot.split("_")[1])])
+                plt.legend()
 
                 plt.annotate("Min: " + str(np.round(np.min(self.sampled_mask), 2)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.round(np.max(self.sampled_mask), 2)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
@@ -983,8 +985,8 @@ class Coordinator:
 
                 # Save visualisation of kriging variance with sampled cells mask applied
                 variance_masked = self.kriging_variance * self.sampled_mask
-                plt.imshow(variance_masked, origin='lower', cmap=self.br_cm)
-                plt.title("Kriging Variance x Sampled Cells Convolution")
+                plt.imshow(variance_masked, origin='lower', cmap="gray")
+                plt.title("Kriging Variance x Sampled Cells Matrix")
                 plt.colorbar()
 
                 # Overlay per-robot sampling points as scatter plot
@@ -992,9 +994,10 @@ class Coordinator:
                     robot_sample_points = self.robot_sample_points[robot]
                     if len(robot_sample_points) > 0:
                         robot_sample_points = np.array(robot_sample_points)
-                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])])
+                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])],
+                                    label=robot)
                         plt.plot(robot_sample_points[:, 0], robot_sample_points[:, 1], c=self.robot_colours[int(robot.split("_")[1])])
-
+                plt.legend()
 
                 plt.annotate("Min: " + str(np.round(np.min(variance_masked), 2)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.round(np.max(variance_masked), 2)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
