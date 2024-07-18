@@ -944,8 +944,11 @@ class Coordinator:
         data_json = str(data_json.data).replace("'", '"')
         data_json = json.loads(data_json)
 
+        sample_position = (data_json["x"], data_json["y"])
+        sample_position_int = (int(data_json["x"]), int(data_json["y"]))
+
         # Append to per-robot sample array
-        self.robot_sample_points[data_json["robot_id"]].append((data_json["x"], data_json["y"]))
+        self.robot_sample_points[data_json["robot_id"]].append(sample_position)
 
         # Generate new sampling goals
         print("Setting sim. speed to 1x while processing new sample...")
@@ -979,7 +982,9 @@ class Coordinator:
                 plt.annotate("Min: " + str(np.round(np.min(self.sampled_mask), 2)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Max: " + str(np.round(np.max(self.sampled_mask), 2)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Time: " + str(int(rospy.get_time()))+"s", (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
-                plt.annotate("Number of samples: " + str(self.numSamples), (0, 0), (80, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("# of samples: " + str(self.numSamples), (0, 0), (80, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Sample position: " + str(sample_position_int), (0, 0), (80, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Cluster ID: " + str(int(cluster_id)), (0, 0), (80, -60), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.savefig(self.figures_path+"/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
                 plt.close()
 
@@ -1004,7 +1009,9 @@ class Coordinator:
                 plt.annotate("Mean: " + str(np.round(np.mean(variance_masked), 2)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Median: " + str(np.round(np.median(variance_masked), 2)), (0, 0), (80, -20), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.annotate("Time: " + str(int(rospy.get_time()))+"s", (0, 0), (80, -40), xycoords='axes fraction', textcoords='offset points', va='top')
-                plt.annotate("Number of samples: " + str(self.numSamples), (0, 0), (80, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("# of samples: " + str(self.numSamples), (0, 0), (80, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Sample position: " + str(sample_position_int), (0, 0), (170, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Cluster ID: " + str(int(cluster_id)), (0, 0), (170, -40), xycoords='axes fraction', textcoords='offset points', va='top')
                 plt.savefig(self.figures_path+"/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
                 plt.close()
 
