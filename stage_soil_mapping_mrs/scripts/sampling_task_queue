@@ -78,6 +78,13 @@ def queue_nav_goal_callback(data):
     rospy.loginfo("Goal queue length: " + str(len(goal_queue)))
 
     task_id = str((math.floor(data.target_pose.pose.position.x), math.floor(data.target_pose.pose.position.y)))
+    goal_queue.append(data)
+
+    # Human-readable goal queue
+    goal_queue_hr = []
+    for g in goal_queue:
+        goal_queue_hr.append([int(g.target_pose.pose.position.x), int(g.target_pose.pose.position.y)])
+
     tasks[task_id] = {
         'robot_id': namespace.strip("/"),
         'task_x': data.target_pose.pose.position.x,
@@ -90,20 +97,14 @@ def queue_nav_goal_callback(data):
         'start_time': "NaN",
         'end_time': "NaN",
         'exec_time': "NaN",
-        'reading': 'NaN'
+        'reading': 'NaN',
+        'task_queue': goal_queue_hr
         }
-    
-    goal_queue.append(data)
 
     # Get robot position from /robot_x/robot_pose topic
     robot_pose = rospy.wait_for_message(namespace + 'robot_pose', PoseStamped)
     tasks[task_id]['robot_x'] = robot_pose.pose.position.x
     tasks[task_id]['robot_y'] = robot_pose.pose.position.y
-
-    # Human-readable goal queue
-    goal_queue_hr = []
-    for goal in goal_queue:
-        goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
 
     if len(goal_queue) > 0:
         goal_queue_pub.publish(str(goal_queue_hr))
@@ -121,6 +122,13 @@ def insert_nav_goal_callback(data):
     rospy.loginfo("Goal queue length: " + str(len(goal_queue)))
     
     task_id = str((math.floor(goal.target_pose.pose.position.x), math.floor(goal.target_pose.pose.position.y)))
+    goal_queue.insert(index, goal)
+
+    # Human-readable goal queue
+    goal_queue_hr = []
+    for g in goal_queue:
+        goal_queue_hr.append([int(g.target_pose.pose.position.x), int(g.target_pose.pose.position.y)])
+    
     tasks[task_id] = {
         'robot_id': namespace.strip("/"),
         'task_x': goal.target_pose.pose.position.x,
@@ -133,20 +141,16 @@ def insert_nav_goal_callback(data):
         'start_time': "NaN",
         'end_time': "NaN",
         'exec_time': "NaN",
-        'reading': "NaN"
+        'reading': "NaN",
+        'task_queue': goal_queue_hr
         }
-
-    goal_queue.insert(index, goal)
 
     # Get robot position from /robot_x/robot_pose topic
     robot_pose = rospy.wait_for_message(namespace + 'robot_pose', PoseStamped)
     tasks[task_id]['robot_x'] = robot_pose.pose.position.x
     tasks[task_id]['robot_y'] = robot_pose.pose.position.y
 
-    # Human-readable goal queue
-    goal_queue_hr = []
-    for goal in goal_queue:
-        goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+    
 
     if len(goal_queue) > 0:
         goal_queue_pub.publish(str(goal_queue_hr))
