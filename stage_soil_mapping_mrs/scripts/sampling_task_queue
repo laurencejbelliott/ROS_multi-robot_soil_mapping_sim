@@ -245,7 +245,7 @@ def queue_nav_goal_listener():
                 goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
             goal_queue_pub.publish(str(goal_queue_hr))
 
-            goal = goal_queue[0]
+            goal = goal_queue[-1]
             if not use_simplified_nav:
                 client.send_goal(goal)
 
@@ -315,7 +315,7 @@ def queue_nav_goal_listener():
                 task_completion_times_pub.publish(data=task_completion_times)
 
             try:
-                goal_queue.pop(0)
+                goal_queue.pop(-1)
             except IndexError:
                 pass
 
