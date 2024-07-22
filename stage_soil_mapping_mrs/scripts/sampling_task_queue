@@ -48,7 +48,6 @@ if not use_simplified_nav:
     client.wait_for_server()
     rospy.loginfo(robot_name + " connected to move_base actionserver!")
 
-goal_queue = []
 sample_positions = []
 robot_speed = 0.4  # m/s
 task_completion_times = []
@@ -58,7 +57,9 @@ cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
 task_completion_times_pub = rospy.Publisher(namespace+node_name+"/task_completion_times", Float32MultiArray, queue_size=1, latch=True)
 global current_pose
 global current_task
+global goal_queue
 current_task = None
+goal_queue = []
 
 # Task logging dataframe (task_queue_length is the length of the queue at the time of allocation)
 task_log = pd.DataFrame(columns=['robot_id', 'task_x', 'task_y', 'robot_x', 'robot_y', 'reading', 'allocation_time', 'insertion_ix', 'task_queue_length', 'start_time', 'end_time', 'exec_time'])
@@ -76,7 +77,11 @@ stage_ground_truth_pose_sub = rospy.Subscriber(namespace+'base_pose_ground_truth
 
 def current_task_callback(data):
     global current_task
+    global goal_queue
     current_task = (data.goal.target_pose.pose.position.x, data.goal.target_pose.pose.position.y)
+    # Remove all instances of 'current_task' from the goal_queue list
+    goal_queue = [g for g in goal_queue if (g.target_pose.pose.position.x, g.target_pose.pose.position.y) != current_task]
+
 
 
 def queue_nav_goal_callback(data):
@@ -231,6 +236,7 @@ def pub_mock_pen_reading(goal):
 
 
 def queue_nav_goal_listener():
+    global goal_queue
     rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
     rospy.Subscriber(namespace+node_name+'/insert_goal', InsertTask, insert_nav_goal_callback)
     rospy.Subscriber(namespace+'/move_base/goal', MoveBaseActionGoal, current_task_callback)
