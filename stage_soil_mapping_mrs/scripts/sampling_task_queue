@@ -7,7 +7,7 @@ import pickle
 import copy
 import os
 import sys
-from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal, MoveBaseActionGoal
 from std_msgs.msg import String, Float32MultiArray
 from geometry_msgs.msg import Pose, PoseStamped
 from nav_msgs.msg import Odometry
@@ -57,6 +57,8 @@ sample_positions_pub = rospy.Publisher(namespace+node_name+"/sample_positions", 
 cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
 task_completion_times_pub = rospy.Publisher(namespace+node_name+"/task_completion_times", Float32MultiArray, queue_size=1, latch=True)
 global current_pose
+global current_task
+current_task = None
 
 # Task logging dataframe (task_queue_length is the length of the queue at the time of allocation)
 task_log = pd.DataFrame(columns=['robot_id', 'task_x', 'task_y', 'robot_x', 'robot_y', 'reading', 'allocation_time', 'insertion_ix', 'task_queue_length', 'start_time', 'end_time', 'exec_time'])
@@ -70,6 +72,11 @@ def stage_ground_truth_pose_cb(odom_msg):
 
 stage_ground_truth_pose_sub = rospy.Subscriber(namespace+'base_pose_ground_truth', Odometry,
                                                stage_ground_truth_pose_cb)
+
+
+def current_task_callback(data):
+    global current_task
+    current_task = (data.goal.target_pose.pose.position.x, data.goal.target_pose.pose.position.y)
 
 
 def queue_nav_goal_callback(data):
@@ -98,6 +105,7 @@ def queue_nav_goal_callback(data):
         'end_time': "NaN",
         'exec_time': "NaN",
         'reading': 'NaN',
+        'current_task': current_task,
         'task_queue': goal_queue_hr
         }
 
@@ -142,6 +150,7 @@ def insert_nav_goal_callback(data):
         'end_time': "NaN",
         'exec_time': "NaN",
         'reading': "NaN",
+        'current_task': current_task,
         'task_queue': goal_queue_hr
         }
 
@@ -224,6 +233,7 @@ def pub_mock_pen_reading(goal):
 def queue_nav_goal_listener():
     rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
     rospy.Subscriber(namespace+node_name+'/insert_goal', InsertTask, insert_nav_goal_callback)
+    rospy.Subscriber(namespace+'/move_base/goal', MoveBaseActionGoal, current_task_callback)
     # rospy.Subscriber(namespace+node_name+'/set_goal_queue', String, set_goal_queue_callback)
 
     r = rospy.Rate(1)
