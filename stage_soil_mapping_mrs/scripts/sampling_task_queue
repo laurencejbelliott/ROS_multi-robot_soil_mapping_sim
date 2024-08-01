@@ -135,7 +135,10 @@ def insert_nav_goal_callback(data):
     rospy.loginfo("Goal queue length: " + str(len(goal_queue)))
     
     task_id = str((math.floor(goal.target_pose.pose.position.x), math.floor(goal.target_pose.pose.position.y)))
-    goal_queue.insert(index, goal)
+    if index == -1:
+        goal_queue.append(goal)
+    else:
+        goal_queue.insert(index, goal)
 
     # Human-readable goal queue
     goal_queue_hr = []
