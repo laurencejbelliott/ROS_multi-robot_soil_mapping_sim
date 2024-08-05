@@ -17,8 +17,6 @@ from rospy_message_converter import message_converter
 import numpy as np
 import pandas as pd
 
-# TODO:
-#  - Retry failed goals x times, then cancel goal and remove from queue
 
 rospack = rospkg.RosPack()
 package_path = rospack.get_path('stage_soil_mapping_mrs')
@@ -78,7 +76,7 @@ stage_ground_truth_pose_sub = rospy.Subscriber(namespace+'base_pose_ground_truth
 def current_task_callback(data):
     global current_task
     global goal_queue
-    current_task = (data.goal.target_pose.pose.position.x, data.goal.target_pose.pose.position.y)
+    current_task = (data.goal.target_pose.pose.position.x, data.goal.target_pose.pose.position.y)   
     # Remove all instances of 'current_task' from the goal_queue list
     goal_queue = [g for g in goal_queue if (g.target_pose.pose.position.x, g.target_pose.pose.position.y) != current_task]
 
@@ -248,13 +246,18 @@ def queue_nav_goal_listener():
     r = rospy.Rate(1)
     while not rospy.is_shutdown():
         if len(goal_queue) > 0:
+            goal = goal_queue[0]
+            try:
+                goal_queue.pop(0)
+            except IndexError:
+                pass
+            
             # Publish human-readable goal queue
             goal_queue_hr = []
-            for goal in goal_queue:
-                goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+            for g in goal_queue:
+                goal_queue_hr.append([g.target_pose.pose.position.x, g.target_pose.pose.position.y])
             goal_queue_pub.publish(str(goal_queue_hr))
-
-            goal = goal_queue[0]
+            
             if not use_simplified_nav:
                 client.send_goal(goal)
 
@@ -322,11 +325,6 @@ def queue_nav_goal_listener():
                 goal_exec_time = goal_end_time - goal_start_time
                 task_completion_times.append(goal_exec_time)
                 task_completion_times_pub.publish(data=task_completion_times)
-
-            try:
-                goal_queue.pop(0)
-            except IndexError:
-                pass
 
             # Publish the human-readable goal queue without the completed goal
             goal_queue_hr = []
