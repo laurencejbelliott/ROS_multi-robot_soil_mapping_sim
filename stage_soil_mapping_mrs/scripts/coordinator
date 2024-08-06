@@ -376,7 +376,7 @@ class Coordinator:
     
 
     def dynamic_sampling(self):
-        # Get the 2x highest mean kriging variance course-grain cells, where x is the number of robots
+        # Get the x highest mean kriging variance course-grain cells, where x is the number of robots
         points = []
 
         # Get the mean kriging variance for each cell in the dynamic sampling grid
@@ -395,12 +395,12 @@ class Coordinator:
             except KeyError:
                 pass
 
-        # Get the 2x highest mean kriging variance cells
+        # Get the `num_robots` highest mean kriging variance cells
         sorted_ds_grid_mean_kriging_variance = sorted(copy.deepcopy(self.ds_grid_mean_kriging_variance).items(), key=operator.itemgetter(1), reverse=True)
 
         goal_cells = []
         # Exclude these cells from future rounds of dynamic sampling
-        for cell_id, _ in sorted_ds_grid_mean_kriging_variance[:self.num_robots*2]:
+        for cell_id, _ in sorted_ds_grid_mean_kriging_variance[:self.num_robots]:
             self.allocated_course_cells.append(cell_id)
             goal_cells.append(cell_id)
 
