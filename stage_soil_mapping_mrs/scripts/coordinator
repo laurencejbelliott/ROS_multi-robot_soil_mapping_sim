@@ -321,7 +321,7 @@ class Coordinator:
                 self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=0)
             self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
             self.robot_pose_subs[robot] = rospy.Subscriber("/" + robot + "/robot_pose", PoseStamped, self.robot_pose_callback, callback_args=robot)
-            self.robot_task_queue_len_subs[robot] = rospy.Subscriber("/" + robot + "/metrics/goal_queue_length", Int16, self.robot_task_queue_length_callback, callback_args=robot)
+            self.robot_task_queue_len_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue_length", Int16, self.robot_task_queue_length_callback, callback_args=robot)
             self.robot_task_queue_lens[robot] = 0
 
         rospy.loginfo("Robots: " + str(self.robots))

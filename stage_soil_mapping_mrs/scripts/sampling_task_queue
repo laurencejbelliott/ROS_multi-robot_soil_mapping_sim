@@ -8,7 +8,7 @@ import copy
 import os
 import sys
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal, MoveBaseActionGoal
-from std_msgs.msg import String, Float32MultiArray
+from std_msgs.msg import String, Int16, Float32MultiArray
 from geometry_msgs.msg import Pose, PoseStamped
 from nav_msgs.msg import Odometry
 from stage_soil_mapping_mrs.msg import InsertTask
@@ -50,12 +50,16 @@ sample_positions = []
 robot_speed = 0.4  # m/s
 task_completion_times = []
 goal_queue_pub = rospy.Publisher(namespace+node_name+"/goal_queue", String, queue_size=1)
+goal_queue_length_pub = rospy.Publisher(namespace+node_name+"/goal_queue_length", Int16, queue_size=1)
+max_goal_queue_length_pub = rospy.Publisher(namespace+node_name+"/max_goal_queue_length", Int16, queue_size=1)
 sample_positions_pub = rospy.Publisher(namespace+node_name+"/sample_positions", String, queue_size=1)
 cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
 task_completion_times_pub = rospy.Publisher(namespace+node_name+"/task_completion_times", Float32MultiArray, queue_size=1, latch=True)
 global current_pose
 global current_task
 global goal_queue
+global max_goal_queue_length
+max_goal_queue_length = 0
 current_task = None
 goal_queue = []
 
@@ -112,6 +116,15 @@ def queue_nav_goal_callback(data):
         'task_queue': goal_queue_hr
         }
 
+    # Publish goal_queue_length
+    goal_queue_length_pub.publish(len(goal_queue))
+
+    # Update max_goal_queue_length
+    global max_goal_queue_length
+    if len(goal_queue) > max_goal_queue_length:
+        max_goal_queue_length = len(goal_queue)
+        max_goal_queue_length_pub.publish(max_goal_queue_length)
+    
     # Get robot position from /robot_x/robot_pose topic
     robot_pose = rospy.wait_for_message(namespace + 'robot_pose', PoseStamped)
     tasks[task_id]['robot_x'] = robot_pose.pose.position.x
@@ -159,6 +172,9 @@ def insert_nav_goal_callback(data):
         'current_task': current_task,
         'task_queue': goal_queue_hr
         }
+
+    # Publish goal_queue_length
+    goal_queue_length_pub.publish(len(goal_queue))
 
     # Get robot position from /robot_x/robot_pose topic
     robot_pose = rospy.wait_for_message(namespace + 'robot_pose', PoseStamped)
