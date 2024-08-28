@@ -94,7 +94,7 @@ class Coordinator:
         self.simulator = simulator
 
         self.robot_speed = 2.0 # m/s
-        self.bid_function = bid_function # "euclidean_distance", "euclidean_distance_with_insertion", "distance_over_variance", "distance_over_variance_with_insertion", "insertion_weighted_euclidean_distance", "insertion_weighted_distance_over_variance"
+        self.bid_function = bid_function # "euclidean_distance", "euclidean_distance_with_insertion", "distance_over_variance", "distance_over_variance_with_insertion", "insertion_weighted_euclidean_distance", "insertion_weighted_distance_over_variance", "distance_times_variance"
         self.sort_tasks = use_queue_sorting # Sort tasks in task queue to minimise distance travelled by robot
         self.drop_low_variance_tasks = drop_low_variance_tasks # Drop tasks with low kriging variance from task queue
         self.trial_name = trial_name # Name of trial, used for bag file name and log file names
@@ -206,6 +206,8 @@ class Coordinator:
         self.numSamples = 0
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
 
+        self.use_task_queue_limit = True
+        self.task_queue_len_limit = 3
 
         # If task allocation algorithm is 'dynamic', partition the environment into a grid,
         # this is used to address oversampling in the dynamic sampling algorithm
@@ -483,114 +485,124 @@ class Coordinator:
                         robot_pose_msg = self.robot_poses[robot]
                         robot_position = (robot_pose_msg.pose.position.x, robot_pose_msg.pose.position.y)
 
-                    # Calculate bid as cost of path between robot and all tasks in their task queue, for each possible insertion of the new task
-                    if self.bid_function == "euclidean_distance_with_insertion":
-                        min_cost = float("inf")
-                        min_cost_index = 0
-                        robot_task_queue = self.robot_task_queues[robot]
-                        for i in range(len(robot_task_queue) + 1):
-                            task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                    # Get robot task queue length and check if it exceeds the limit
+                    task_queue_full = False
+                    if (self.use_task_queue_limit) and (len(self.robot_task_queues[robot]) >= self.task_queue_len_limit):
+                        rospy.loginfo("Task queue for robot " + robot + " is full. Skipping task allocation for this robot.")
+                        task_queue_full = True
 
-                            robot_tasks_sanitised = []
-                            for task_position in copy.deepcopy(task_queue):
-                                # Handle task where insertion index is given as well as position
-                                if type(task_position[0]) != np.int64 and type(task_position[0]) != float and type(task_position[0]) != int:
-                                    if len(task_position[0]) == 2:
-                                        task_position = task_position[0]
-                                robot_tasks_sanitised.append(task_position)
-                            robot_tasks_sanitised = np.array(robot_tasks_sanitised)
-                            # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
-                            # start = perf_counter()
-                            cost = calculate_path_cost(robot_position, task, self.robot_speed)
-                            cost += calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
-                            # end = perf_counter()
+                    if not task_queue_full:
+                        # Calculate bid as cost of path between robot and all tasks in their task queue, for each possible insertion of the new task
+                        if self.bid_function == "euclidean_distance_with_insertion":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
 
-                            # avg_queue_cost_times.append((end - start) * 1000)
+                                robot_tasks_sanitised = []
+                                for task_position in copy.deepcopy(task_queue):
+                                    # Handle task where insertion index is given as well as position
+                                    if type(task_position[0]) != np.int64 and type(task_position[0]) != float and type(task_position[0]) != int:
+                                        if len(task_position[0]) == 2:
+                                            task_position = task_position[0]
+                                    robot_tasks_sanitised.append(task_position)
+                                robot_tasks_sanitised = np.array(robot_tasks_sanitised)
+                                # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
+                                # start = perf_counter()
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed)
+                                cost += calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
+                                # end = perf_counter()
 
-                            # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
-                            if cost < min_cost:
-                                min_cost = cost
-                                min_cost_index = i
+                                # avg_queue_cost_times.append((end - start) * 1000)
 
-                        min_cost_indices.append(min_cost_index)
-                        bid = min_cost
+                                # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
 
-                    # Calculate bid as cost of path between robot and new task, multiplied by task insertion idex ((Euclidean distance * robot speed) * (insertion index + 1)), with cheapest-insertion heuristic. Note that insertion index is 0-indexed, hence +1
-                    elif self.bid_function == "insertion_weighted_euclidean_distance":
-                        min_cost = float("inf")
-                        min_cost_index = 0
-                        robot_task_queue = self.robot_task_queues[robot]
-                        for i in range(len(robot_task_queue) + 1):
-                            task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost
 
-                            robot_tasks_sanitised = []
-                            for task_position in copy.deepcopy(task_queue):
-                                # Handle task where insertion index is given as well as position
-                                if type(task_position[0]) != np.int64 and type(task_position[0]) != float and type(task_position[0]) != int:
-                                    if len(task_position[0]) == 2:
-                                        task_position = task_position[0]
-                                robot_tasks_sanitised.append(task_position)
-                            robot_tasks_sanitised = np.array(robot_tasks_sanitised)
-                            # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
-                            # start = perf_counter()
-                            cost = calculate_path_cost(robot_position, task, self.robot_speed)
-                            cost += calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
-                            # end = perf_counter()
+                        # Calculate bid as cost of path between robot and new task, multiplied by task insertion idex ((Euclidean distance * robot speed) * (insertion index + 1)), with cheapest-insertion heuristic. Note that insertion index is 0-indexed, hence +1
+                        elif self.bid_function == "insertion_weighted_euclidean_distance":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
 
-                            # avg_queue_cost_times.append((end - start) * 1000)
+                                robot_tasks_sanitised = []
+                                for task_position in copy.deepcopy(task_queue):
+                                    # Handle task where insertion index is given as well as position
+                                    if type(task_position[0]) != np.int64 and type(task_position[0]) != float and type(task_position[0]) != int:
+                                        if len(task_position[0]) == 2:
+                                            task_position = task_position[0]
+                                    robot_tasks_sanitised.append(task_position)
+                                robot_tasks_sanitised = np.array(robot_tasks_sanitised)
+                                # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
+                                # start = perf_counter()
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed)
+                                cost += calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
+                                # end = perf_counter()
 
-                            # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
-                            if cost < min_cost:
-                                min_cost = cost
-                                min_cost_index = i
+                                # avg_queue_cost_times.append((end - start) * 1000)
 
-                        min_cost_indices.append(min_cost_index)
-                        bid = min_cost * (min_cost_index + 1)
+                                # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
 
-                    # Calculate bid as cost of path between robot and new task (Euclidean distance * robot speed)
-                    elif self.bid_function == "euclidean_distance":
-                        bid = calculate_path_cost(robot_position, task, self.robot_speed)
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost * (min_cost_index + 1)
 
-                    # Calculate bid as Euclidean distance over kriging variance at task position
-                    elif self.bid_function == "distance_over_variance":
-                        # Calculate bid
-                        bid = calculate_path_cost(robot_position, task, self.robot_speed) / self.kriging_variance[int(task[1]), int(task[0])]
-                    # Calculate bid as Euclidean distance over kriging variance at task position, with cheapest-insertion heuristic
-                    elif self.bid_function == "distance_over_variance_with_insertion":
-                        min_cost = float("inf")
-                        min_cost_index = 0
-                        robot_task_queue = self.robot_task_queues[robot]
-                        for i in range(len(robot_task_queue) + 1):
-                            task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
-                            cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
-                            cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
-                            if cost < min_cost:
-                                min_cost = cost
-                                min_cost_index = i
-                        min_cost_indices.append(min_cost_index)
-                        bid = min_cost
-                    # Calculate bid as Euclidean distance over kriging variance at task position, multiplied by task insertion idex ((Euclidean distance * robot speed) * (insertion index + 1)), with cheapest-insertion heuristic. Note that insertion index is 0-indexed, hence +1
-                    elif self.bid_function == "insertion_weighted_distance_over_variance":
-                        min_cost = float("inf")
-                        min_cost_index = 0
-                        robot_task_queue = self.robot_task_queues[robot]
-                        for i in range(len(robot_task_queue) + 1):
-                            task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
-                            cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
-                            cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
-                            if cost < min_cost:
-                                min_cost = cost
-                                min_cost_index = i
-                        min_cost_indices.append(min_cost_index)
-                        bid = min_cost * (min_cost_index + 1)
+                        # Calculate bid as cost of path between robot and new task (Euclidean distance * robot speed)
+                        elif self.bid_function == "euclidean_distance":
+                            bid = calculate_path_cost(robot_position, task, self.robot_speed)
 
-                    # Add bids to interpolation log (key of bids dict is the task (x,y) position, value is a dict with robot IDs as keys and bids as values)
-                    try:
-                        self.interpolations[str(self.numSamples)]["Bids"][str(task)]["robot_" + str(self.robots.index(robot))] = bid
-                    except KeyError:
-                        pass
-                    bids.append(bid)
-                
+                        # Calculate bid as Euclidean distance over kriging variance at task position
+                        elif self.bid_function == "distance_over_variance":
+                            # Calculate bid
+                            bid = calculate_path_cost(robot_position, task, self.robot_speed) / self.kriging_variance[int(task[1]), int(task[0])]
+                        # elif self.bid_function == "distance_times_variance":
+                        #     bid = calculate_path_cost(robot_position, task, self.robot_speed) * self.kriging_variance[int(self.robot_poses[robot].pose.position.y), int(self.robot_poses[robot].pose.position.x)]
+                        
+                        # Calculate bid as Euclidean distance over kriging variance at task position, with cheapest-insertion heuristic
+                        elif self.bid_function == "distance_over_variance_with_insertion":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
+                                cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost
+                        # Calculate bid as Euclidean distance over kriging variance at task position, multiplied by task insertion index ((Euclidean distance * robot speed) * (insertion index + 1)), with cheapest-insertion heuristic. Note that insertion index is 0-indexed, hence +1
+                        elif self.bid_function == "insertion_weighted_distance_over_variance":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
+                                cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost * (min_cost_index + 1)
+
+                        # Add bids to interpolation log (key of bids dict is the task (x,y) position, value is a dict with robot IDs as keys and bids as values)
+                        try:
+                            self.interpolations[str(self.numSamples)]["Bids"][str(task)]["robot_" + str(self.robots.index(robot))] = bid
+                        except KeyError:
+                            pass
+                        bids.append(bid)
+                    
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
                 # for b in range(len(bids)):
                 #     rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
@@ -815,7 +827,6 @@ class Coordinator:
                 rospy.logwarn("LinAlgError occurred, skipping interpolation...")
                 
 
-            
             if interpolation_successful:
                 # Check if mean variance is not extremely high (this can sometimes happen due to a bug in the kriging library)
                 print("Mean kriging variance: " + str(avgVar))
@@ -1020,69 +1031,79 @@ class Coordinator:
         self.metricPubRMSE()
         self.metricPubAvgVariance()
 
-
-        if "grid" not in self.sampling_algo:
-            if "random" in self.sampling_algo:
-                self.tasks += self.random_sampling()
-            elif "dynamic" in self.sampling_algo and self.numSamples >= 2:
-                if np.mean(self.kriging_variance) >= -1:
-                    rospy.loginfo("Generating sampling goals with dynamic sampling...")
-                    self.tasks += self.dynamic_sampling()
+        queues_full = False
             
-            if self.drop_low_variance_tasks.lower() == "true":
-                # Drop tasks where kriging variance at the task position is less than the median of positive kriging variance values
-                # This is to avoid robots sampling in areas where the kriging variance has become very low
+        task_queue_lens = []
+        for robot in self.robots:
+            task_queue_lens.append(len(self.robot_task_queues[robot]))
+        if (np.min(task_queue_lens) >= self.task_queue_len_limit) and (self.use_task_queue_limit):
+            queues_full = True
 
-                # Filter to just the positive kriging variance values
-                kriging_variance_positive = self.kriging_variance[self.kriging_variance > 0]
+        if not queues_full:
+            if "grid" not in self.sampling_algo:
+                if "random" in self.sampling_algo:
+                    self.tasks += self.random_sampling()
+                elif "dynamic" in self.sampling_algo and self.numSamples >= 2:
+                    if np.mean(self.kriging_variance) >= -1:
+                        rospy.loginfo("Generating sampling goals with dynamic sampling...")
+                        self.tasks += self.dynamic_sampling()
                 
-                # Calculate the median of the positive kriging variance values
-                kriging_variance_median = np.median(kriging_variance_positive)
-                kriging_variance_threshold = kriging_variance_median * 0.75
-                rospy.loginfo("Dropping tasks with kriging variance less than median of positive kriging variance values...")
-                rospy.loginfo("Median positive kriging variance: " + str(kriging_variance_median))
-                rospy.loginfo("Threshold: " + str(kriging_variance_threshold))
+                if self.drop_low_variance_tasks.lower() == "true":
+                    # Drop tasks where kriging variance at the task position is less than the median of positive kriging variance values
+                    # This is to avoid robots sampling in areas where the kriging variance has become very low
 
-                # Drop tasks from created tasks list where kriging variance is less than the median of positive kriging variance values
-                tasks_to_drop = []
-                for task in self.tasks:
-                    print("Task: " + str(task))
-                    print("Task kriging variance: " + str(self.kriging_variance[int(task[1]), int(task[0])]))
-                    print("Threshold: " + str(kriging_variance_threshold) + "\n")
-                    if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_threshold):
-                        tasks_to_drop.append(task)
-                rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks...")
-                rospy.loginfo("Tasks:" + str(self.tasks))
-                rospy.loginfo("Tasks to drop: " + str(tasks_to_drop))
+                    # Filter to just the positive kriging variance values
+                    kriging_variance_positive = self.kriging_variance[self.kriging_variance > 0]
+                    
+                    # Calculate the median of the positive kriging variance values
+                    kriging_variance_median = np.median(kriging_variance_positive)
+                    kriging_variance_threshold = kriging_variance_median * 0.75
+                    rospy.loginfo("Dropping tasks with kriging variance less than median of positive kriging variance values...")
+                    rospy.loginfo("Median positive kriging variance: " + str(kriging_variance_median))
+                    rospy.loginfo("Threshold: " + str(kriging_variance_threshold))
+
+                    # Drop tasks from created tasks list where kriging variance is less than the median of positive kriging variance values
+                    tasks_to_drop = []
+                    for task in self.tasks:
+                        print("Task: " + str(task))
+                        print("Task kriging variance: " + str(self.kriging_variance[int(task[1]), int(task[0])]))
+                        print("Threshold: " + str(kriging_variance_threshold) + "\n")
+                        if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_threshold):
+                            tasks_to_drop.append(task)
+                    rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks...")
+                    rospy.loginfo("Tasks:" + str(self.tasks))
+                    rospy.loginfo("Tasks to drop: " + str(tasks_to_drop))
+                    
+                    # Get indices of tasks to drop
+                    tasks_to_drop_indices = []
+                    tasks_as_strings = []
+                    for task in self.tasks:
+                        tasks_as_strings.append(str(task))
+
+                    for task in tasks_to_drop:
+                        tasks_to_drop_indices.append(tasks_as_strings.index(str(task)))
+                    
+                    # Drop tasks from list
+                    self.tasks = np.array(self.tasks)
+                    self.tasks = np.delete(self.tasks, tasks_to_drop_indices, axis=0)
+                    self.tasks = self.tasks.tolist()
+                    rospy.loginfo("Remaining new tasks: " + str(self.tasks))
+
+                if len(self.tasks) > 0:
+                    try:
+                        self.interpolations[str(self.numSamples)]["Tasks Created"] = [tuple(task) for task in self.tasks]
+                    except KeyError:
+                        pass
                 
-                # Get indices of tasks to drop
-                tasks_to_drop_indices = []
-                tasks_as_strings = []
-                for task in self.tasks:
-                    tasks_as_strings.append(str(task))
+                if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
+                    rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
+                    self.publish_ta(self.rr_ta())
+                if "SSI" in str(self.ta_algo).upper():
+                    rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
+                    self.publish_ta(self.ssi_ta())
+        else:
+            rospy.loginfo("Task queues are full, skipping task creation...")
 
-                for task in tasks_to_drop:
-                    tasks_to_drop_indices.append(tasks_as_strings.index(str(task)))
-                
-                # Drop tasks from list
-                self.tasks = np.array(self.tasks)
-                self.tasks = np.delete(self.tasks, tasks_to_drop_indices, axis=0)
-                self.tasks = self.tasks.tolist()
-                rospy.loginfo("Remaining new tasks: " + str(self.tasks))
-
-            if len(self.tasks) > 0:
-                try:
-                    self.interpolations[str(self.numSamples)]["Tasks Created"] = [tuple(task) for task in self.tasks]
-                except KeyError:
-                    pass
-            
-            if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
-                rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
-                self.publish_ta(self.rr_ta())
-            if "SSI" in str(self.ta_algo).upper():
-                rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
-                self.publish_ta(self.ssi_ta())
-        
         self.interpolation_log = pd.DataFrame.from_dict(self.interpolations, orient='index')
 
         # Name index column as 'interpolation_time'
