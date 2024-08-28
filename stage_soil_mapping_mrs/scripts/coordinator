@@ -21,7 +21,7 @@ from time import sleep
 
 from matplotlib import pyplot as plt
 from kriging_utils.kriging import predict_by_kriging
-from std_msgs.msg import String, Float64, Int64, Bool
+from std_msgs.msg import String, Float64, Int64, Int16, Bool
 from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped, Point
 from visualization_msgs.msg import Marker
@@ -38,7 +38,6 @@ from coordinator_numba_funcs import calculate_path_cost, calculate_task_queue_co
 
 # TODO:
 # - Environment cropping
-# - Visualise sampling points in RViz
 # - Integrate one or two more sophisticated task allocation algorithms*
 # - Dynamic sampling improvements (co-kriging, quadtree environment partitioning, etc.)*
 # * Likely to remain as future work due to scope of the project
@@ -272,6 +271,8 @@ class Coordinator:
         self.robot_pose_subs = {}
         self.robot_task_queue_subs = {}
         self.robot_task_queues = {}
+        self.robot_task_queue_len_subs = {}
+        self.robot_task_queue_lens = {}
         self.robot_tasks_allocated_count = {}
         self.robot_ta_fairnesses = {}
         self.robot_sample_points = {}
@@ -320,6 +321,8 @@ class Coordinator:
                 self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=0)
             self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
             self.robot_pose_subs[robot] = rospy.Subscriber("/" + robot + "/robot_pose", PoseStamped, self.robot_pose_callback, callback_args=robot)
+            self.robot_task_queue_len_subs[robot] = rospy.Subscriber("/" + robot + "/metrics/goal_queue_length", Int16, self.robot_task_queue_length_callback, callback_args=robot)
+            self.robot_task_queue_lens[robot] = 0
 
         rospy.loginfo("Robots: " + str(self.robots))
 
@@ -331,6 +334,10 @@ class Coordinator:
         data = json.loads(data)
 
         self.robot_task_queues[robot] = data
+
+
+    def robot_task_queue_length_callback(self, msg, robot):
+        self.robot_task_queue_lens[robot] = msg.data
 
     
     def robot_pose_callback(self, msg, robot):
@@ -487,7 +494,7 @@ class Coordinator:
 
                     # Get robot task queue length and check if it exceeds the limit
                     task_queue_full = False
-                    if (self.use_task_queue_limit) and (len(self.robot_task_queues[robot]) >= self.task_queue_len_limit):
+                    if (self.use_task_queue_limit) and (self.robot_task_queue_lens[robot] >= self.task_queue_len_limit):
                         rospy.loginfo("Task queue for robot " + robot + " is full. Skipping task allocation for this robot.")
                         task_queue_full = True
 
@@ -602,6 +609,9 @@ class Coordinator:
                         except KeyError:
                             pass
                         bids.append(bid)
+
+                    else:
+                        bids.append(float("inf"))
                     
                 # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
                 # for b in range(len(bids)):
@@ -1035,7 +1045,7 @@ class Coordinator:
             
         task_queue_lens = []
         for robot in self.robots:
-            task_queue_lens.append(len(self.robot_task_queues[robot]))
+            task_queue_lens.append(self.robot_task_queue_lens[robot])
         if (np.min(task_queue_lens) >= self.task_queue_len_limit) and (self.use_task_queue_limit):
             queues_full = True
 
