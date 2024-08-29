@@ -265,6 +265,8 @@ def queue_nav_goal_listener():
             goal = goal_queue[0]
             try:
                 goal_queue.pop(0)
+                # Publish goal_queue_length
+                goal_queue_length_pub.publish(len(goal_queue))
             except IndexError:
                 pass
             
