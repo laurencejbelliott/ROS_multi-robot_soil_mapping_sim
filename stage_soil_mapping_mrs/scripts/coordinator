@@ -206,7 +206,7 @@ class Coordinator:
         self.numSamples = 0
         self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
 
-        self.use_task_queue_limit = True
+        self.use_task_queue_limit = False
         self.task_queue_len_limit = 3
 
         # If task allocation algorithm is 'dynamic', partition the environment into a grid,

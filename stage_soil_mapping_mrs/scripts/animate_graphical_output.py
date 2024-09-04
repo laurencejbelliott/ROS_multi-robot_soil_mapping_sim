@@ -48,10 +48,15 @@ if __name__ == '__main__':
 
     conditions = [
         "distance_over_variance_drop_low_var_tasks_True",
+        "distance_over_variance_drop_low_var_tasks_False",
         "distance_over_variance_with_insertion_drop_low_var_tasks_True",
-        "euclidean_distance_with_insertion_drop_low_var_tasks_False"
+        "distance_over_variance_with_insertion_drop_low_var_tasks_False",
+        "euclidean_distance_drop_low_var_tasks_False",
+        "euclidean_distance_drop_low_var_tasks_True",
+        "euclidean_distance_with_insertion_drop_low_var_tasks_False",
+        "euclidean_distance_with_insertion_drop_low_var_tasks_True"
     ]
-    num_trials = 1
+    num_trials = 10
     
     for condition in conditions:
         for i in range(1, num_trials+1):
