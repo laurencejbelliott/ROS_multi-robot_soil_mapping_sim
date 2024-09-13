@@ -31,6 +31,17 @@ conditions = [
     "euclidean_distance_with_insertion_drop_low_var_tasks_True"
 ]
 
+condition_shorthand = [
+    "DOVTD",
+    "DOV",
+    "DOVCITD",
+    "DOVCI",
+    "ED",
+    "EDTD",
+    "EDCI",
+    "EDCITD"
+]
+
 # Filter the list of CSV files to only include those that match the conditions
 csv_files = [file for file in csv_files if any(condition in file for condition in conditions)]
 # print(csv_files)
@@ -55,6 +66,13 @@ for metric in metrics:
     print("\nMetric: " + metric)
     # List of lists of observations of the current metric for each condition (indices of these lists map to the indices of the `conditions` list)
     observations = []
+
+    # Dataframe for significance test results
+    significance_test_results = pd.DataFrame(columns=condition_shorthand, index=condition_shorthand)
+
+    # Set diagonal to NaN
+    for i in range(0, len(conditions)):
+        significance_test_results.iloc[i, i] = "NaN"
 
     for condition in conditions:
         # Get csv files for the condition
@@ -130,8 +148,14 @@ for metric in metrics:
                     print("P-value: " + str(p_value))
                     if p_value < 0.05:
                         print("There is a significant difference between the means")
+                        # Enter y in significance_test_results dataframe
+                        significance_test_results.iloc[i, j] = 'y'
+                        significance_test_results.iloc[j, i] = 'y'
                     else:
                         print("There is no significant difference between the means")
+                        # Enter n in significance_test_results dataframe
+                        significance_test_results.iloc[i, j] = 'n'
+                        significance_test_results.iloc[j, i] = 'n'
                     print("\n")
         else:
             print("There is no significant difference between the means")
@@ -159,11 +183,18 @@ for metric in metrics:
                     print(result.pvalue[i][j])
                     if result.pvalue[i][j] < 0.05:
                         print("There is a significant difference between the means")
+                        # Enter y in significance_test_results dataframe
+                        significance_test_results.iloc[i, j] = 'y'
+                        significance_test_results.iloc[j, i] = 'y'
                     else:
                         print("There is no significant difference between the means")
+                        # Enter n in significance_test_results dataframe
+                        significance_test_results.iloc[i, j] = 'n'
+                        significance_test_results.iloc[j, i] = 'n'
                     print("\n")
         else:
             print("There is no significant difference between the means")
+    significance_test_results.to_csv(directory + '/' + metric + '_significance_test_results.csv')
 
 for i in range(0, len(conditions)):
-    print(str(i) + ": " + conditions[i])
+    print(str(i) + ": " + condition_shorthand[i] + ": " + conditions[i])
