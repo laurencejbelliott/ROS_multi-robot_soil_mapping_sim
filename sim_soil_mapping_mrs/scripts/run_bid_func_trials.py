@@ -26,7 +26,7 @@ drop_low_variance_tasks = True
 
 
 # Define sets of parameters to combine
-trial_num_set = set([i for i in range(1, 2)])
+trial_num_set = set([i for i in range(1, 31)])
 print("Set of trial numbers: ", trial_num_set)
 
 num_robots_set = set([num_robots])
@@ -44,7 +44,12 @@ print("Set of environment cropping factors: ", env_crop_factor_set)
 
 # bid_function_set = set(["euclidean_distance_with_insertion"])
 # bid_function_set = set(["distance_over_variance_with_insertion"])
-bid_function_set = set(["distance_over_variance"])
+bid_function_set = set([
+    "distance_over_variance",
+    "distance_over_variance_with_insertion",
+    "euclidean_distance",
+    "euclidean_distance_with_insertion"
+    ])
 print("Set of bid functions: ", bid_function_set)
 
 # use_queue_sorting_set = set([True, False])
@@ -52,7 +57,7 @@ use_queue_sorting_set = set([False])
 print("Set of use_queue_sorting states: ", use_queue_sorting_set)
 
 drop_low_variance_tasks_set = set([True])
-# drop_low_variance_tasks_set = set([False])
+drop_low_variance_tasks_set = set([False])
 print("Set of drop_low_variance_tasks states: ", drop_low_variance_tasks_set)
 
 # Create all combinations of trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor
