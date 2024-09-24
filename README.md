@@ -3,7 +3,7 @@ A ROS coordinator and simulation for multi-robot soil properties mapping.
 
 This centralised coordinator directs a team of robots in mapping geospatial data using Ordinary Kriging (OK) interpolation. The kriging variance, a metric of the uncertainty of the interpolation's predictions, is used to decide where robots should sample, and informs allocation of these sampling tasks to the robots.
 
-A simulation for demonstration and testing of this soil mapping multi-robot system, using the [move_base_abstract](https://github.com/laurencejbelliott/move_base_abstract) simulator, is included alongside the coordinator in this repository.
+A simulation for demonstration and testing of this soil mapping multi-robot system, using the [move_base_abstract](https://github.com/laurencejbelliott/move_base_abstract) simulator, is included alongside the coordinator in this repository. The simulation re-samples soil compaction data recorded at the University of Lincoln's Riseholme agricultural campus published in the [dataset of Fentanes et al](https://figshare.com/projects/Soil_Compaction_Dataset/31418).
 
 ## Setup
 With your working directory as the `src` directory of a [catkin workspace](https://wiki.ros.org/catkin/Tutorials/create_a_workspace), clone the repo using:
