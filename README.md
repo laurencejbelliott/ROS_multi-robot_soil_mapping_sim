@@ -16,8 +16,15 @@ rosdep install --from-paths src --ignore-src -r -y
 ```
 Finally, build the package with `catkin build`.
 
-## Run Demo Sampling Mission
+## Run Demo Soil Compaction Sampling Mission
 To run an example sampling mission use the command:
 ```
 rosrun sim_soil_mapping_mrs run_single_trial.py
 ```
+
+## Run ICRA '25 Soil Compaction Sampling Trials
+To replicate the soil compaction mapping trials run for the ICRA '25 submission use the command:
+```
+rosrun sim_soil_mapping_mrs run_bid_func_trials.py
+```
+Please note this will take a long time to complete, and the data produced from these trials will require a significant amount of free storage space.
