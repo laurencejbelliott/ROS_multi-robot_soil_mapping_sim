@@ -42,8 +42,6 @@ print("Set of sampling algorithms: ", sampling_algo_set)
 env_crop_factor_set = set([env_crop_factor])
 print("Set of environment cropping factors: ", env_crop_factor_set)
 
-# bid_function_set = set(["euclidean_distance_with_insertion"])
-# bid_function_set = set(["distance_over_variance_with_insertion"])
 bid_function_set = set([
     "distance_over_variance",
     "distance_over_variance_with_insertion",
