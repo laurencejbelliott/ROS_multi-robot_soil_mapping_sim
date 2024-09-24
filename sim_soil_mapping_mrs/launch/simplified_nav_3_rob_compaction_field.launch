@@ -1,0 +1,90 @@
+<launch>
+  <master auto="start"/>
+  <!-- Configure and start stage_ros simulator-->
+  <param name="/use_sim_time" value="true"/>
+  <node name="map_server" pkg="map_server" type="map_server" args="$(find sim_soil_mapping_mrs)/stage_config/maps/Compaction_Field.pgm 0.05" respawn="false" />
+
+  <node pkg="stage_ros_add_pose_and_crash" type="stageros" name="stageros" args="-g $(find sim_soil_mapping_mrs)/stage_config/worlds/3_Rob_Compaction.world" respawn="false">
+    <param name="base_watchdog_timeout" value="0.2"/>
+    <param name="is_clock_published" value="false"/>
+  </node>
+
+  <!-- BEGIN ROBOT 0 -->
+  <group ns="robot_0">
+    <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
+    <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
+    args='"robot_0" "stage_ros" 2.0 0.0 0.0 0.1 0.1'/>
+
+    <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
+      <param name="tf_prefix" value="robot_0" />
+      <param name="odom_frame_id" value="robot_0/odom" />
+      <param name="base_frame_id" value="robot_0/base_link" />
+      <param name="delta_x" value="-162.0" />
+      <param name="delta_y" value="-110.0" />
+      <param name="delta_yaw" value="0.0" />
+      <param name="global_frame_id" value="map" />
+    </node>
+
+    <node pkg="sim_soil_mapping_mrs" type="sampling_task_queue" name="sampling_task_queue" respawn="false" output="screen" />
+  </group>
+  <!-- END ROBOT 0 -->
+
+  <!-- BEGIN ROBOT 1 -->
+  <group ns="robot_1">
+    <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
+    <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
+    args='"robot_1" "stage_ros" 2.0 0.0 0.0 0.1 0.1'/>
+
+    <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
+      <param name="tf_prefix" value="robot_1" />
+      <param name="odom_frame_id" value="robot_1/odom" />
+      <param name="base_frame_id" value="robot_1/base_link" />
+      <param name="delta_x" value="-162.0" />
+      <param name="delta_y" value="-110.0" />
+      <param name="delta_yaw" value="0.0" />
+      <param name="global_frame_id" value="map" />
+    </node>
+
+    <node pkg="sim_soil_mapping_mrs" type="sampling_task_queue" name="sampling_task_queue" respawn="false" output="screen" />
+  </group>
+  <!-- END ROBOT 1 -->
+
+  <!-- BEGIN ROBOT 2 -->
+  <group ns="robot_2">
+    <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
+    <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
+    args='"robot_2" "stage_ros" 2.0 0.0 0.0 0.1 0.1'/>
+    
+    <node pkg="fake_localization" type="fake_localization" name="fake_localization" respawn="false" output="screen">
+      <param name="tf_prefix" value="robot_2" />
+      <param name="odom_frame_id" value="robot_2/odom" />
+      <param name="base_frame_id" value="robot_2/base_link" />
+      <param name="delta_x" value="-162.0" />
+      <param name="delta_y" value="-110.0" />
+      <param name="delta_yaw" value="0.0" />
+      <param name="global_frame_id" value="map" />
+    </node>
+
+    <node pkg="sim_soil_mapping_mrs" type="sampling_task_queue" name="sampling_task_queue" respawn="false" output="screen" />
+  </group>
+  <!-- END ROBOT 2 -->
+
+  <!-- Run global nodes -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find sim_soil_mapping_mrs)/rviz/multi_robot.rviz" >
+     <remap from="/move_base_simple/goal" to="/robot_0/move_base_simple/goal" />
+  </node>
+
+  <node pkg="sim_soil_mapping_mrs" type="metric_publisher" name="metric_publisher" respawn="false" output="screen" />
+
+  <node pkg="sim_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen"
+  args='$(arg trial_num) 3 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor) $(arg figures_path) $(arg simulator)'/>
+  
+  <node pkg="sim_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
+
+  <node pkg="rosbag" type="record" name="rosbag_record"
+  args='rosbag record -e "(.*)metrics(.*)|(.*)coordinator(.*)||(.*)initialized(.*)|(.*)amcl_pose(.*)|(.*)goal_queue(.*)|(.*)mock_pen_reading(.*)" -O $(find sim_soil_mapping_mrs)/bags/$(arg bag_name).bag'
+  respawn="false" output="screen" />
+
+  <node pkg="sim_soil_mapping_mrs" type="check_time_elapsed" name="check_time_elapsed" respawn="false" output="screen"
+  args='$(arg sampling_time_budget)'/>
+</launch>

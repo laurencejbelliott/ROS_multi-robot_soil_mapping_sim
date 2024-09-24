@@ -1,0 +1,57 @@
+<launch>
+  <!-- Configure and start simulator-->
+  <param name="/use_sim_time" value="true"/>
+  <node name="map_server" pkg="map_server" type="map_server" args="$(find sim_soil_mapping_mrs)/stage_config/maps/Compaction_Field.pgm 0.05" respawn="false" />
+
+  <!-- BEGIN ROBOT 0 -->
+  <group ns="robot_0">
+    <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
+    <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
+    args='"robot_0" "virtual_robots" 2.0 0.0 0.0 0.1 0.1'/>
+    <!-- START SAMPLING TASK QUEUE -->
+    <node pkg="sim_soil_mapping_mrs" type="sampling_task_queue" name="sampling_task_queue" respawn="false" output="screen"
+    args='$(arg trial_name)'/>
+  </group>
+  <!-- END ROBOT 0 -->
+
+  <!-- BEGIN ROBOT 1 -->
+  <group ns="robot_1">
+    <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
+    <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
+    args='"robot_1" "virtual_robots" 2.0 0.0 0.0 0.1 0.1'/>
+    <!-- START SAMPLING TASK QUEUE -->
+    <node pkg="sim_soil_mapping_mrs" type="sampling_task_queue" name="sampling_task_queue" respawn="false" output="screen"
+    args='$(arg trial_name)'/>
+  </group>
+  <!-- END ROBOT 1 -->
+
+  <!-- BEGIN ROBOT 2 -->
+  <group ns="robot_2">
+    <!-- START MOVE_BASE_ABSTRACT ACTIONSERVER -->
+    <node pkg="move_base_abstract" type="move_base_abstract_actionserver" respawn="false" name="move_base_node" output="screen"
+    args='"robot_2" "virtual_robots" 2.0 0.0 0.0 0.1 0.1'/>
+    <!-- START SAMPLING TASK QUEUE -->
+    <node pkg="sim_soil_mapping_mrs" type="sampling_task_queue" name="sampling_task_queue" respawn="false" output="screen"
+    args='$(arg trial_name)'/>
+  </group>
+  <!-- END ROBOT 2 -->
+
+  <!-- Run global nodes -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find sim_soil_mapping_mrs)/rviz/multi_robot_mba.rviz" >
+     <remap from="/move_base_simple/goal" to="/robot_0/move_base_simple/goal" />
+  </node>
+
+  <node pkg="sim_soil_mapping_mrs" type="metric_publisher" name="metric_publisher" respawn="false" output="screen" />
+
+  <node pkg="sim_soil_mapping_mrs" type="coordinator" name="coordinator" respawn="false" output="screen"
+  args='$(arg trial_num) 3 $(arg ta_algo) $(arg sampling_algo) $(arg env_crop_factor) $(arg figures_path) $(arg simulator) $(arg bid_function) $(arg use_queue_sorting) $(arg drop_low_variance_tasks) $(arg trial_name)'/>
+  
+  <node pkg="sim_soil_mapping_mrs" type="sim_time_controller" name="sim_time_controller" respawn="false" output="screen" />
+
+  <node pkg="rosbag" type="record" name="rosbag_record"
+  args='rosbag record -e "(.*)metrics(.*)|(.*)coordinator(.*)||(.*)initialized(.*)|(.*)robot_pose(.*)|(.*)goal_queue(.*)|(.*)mock_pen_reading(.*)" -O $(find sim_soil_mapping_mrs)/bags/$(arg bag_name).bag'
+  respawn="false" output="screen" />
+
+  <node pkg="sim_soil_mapping_mrs" type="check_time_elapsed" name="check_time_elapsed" respawn="false" output="screen"
+  args='$(arg sampling_time_budget)'/>
+</launch>

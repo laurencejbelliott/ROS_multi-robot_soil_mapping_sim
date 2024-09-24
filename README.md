@@ -19,5 +19,5 @@ Finally, build the package with `catkin build`.
 ## Run Demo Sampling Mission
 To run an example sampling mission use the command:
 ```
-rosrun stage_soil_mapping_mrs run_single_trial.py
+rosrun sim_soil_mapping_mrs run_single_trial.py
 ```

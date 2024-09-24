@@ -1,0 +1,1312 @@
+#!/usr/bin/env python3
+__author__ = "Laurence Roberts-Elliott"
+
+import numpy as np
+import pandas as pd
+import pickle
+import rospy
+import rospkg
+import json
+import random
+import sys
+import os
+import copy
+import operator
+import shutil
+import time
+import cv2
+import actionlib
+from math import sqrt, floor
+from time import sleep
+
+from matplotlib import pyplot as plt
+from kriging_utils.kriging import predict_by_kriging
+from std_msgs.msg import String, Float64, Int64, Bool
+from nav_msgs.msg import OccupancyGrid
+from geometry_msgs.msg import Pose, PoseStamped, PoseWithCovarianceStamped, Point
+from visualization_msgs.msg import Marker
+from move_base_msgs.msg import MoveBaseGoal
+from sim_soil_mapping_mrs.msg import InsertTask, Map, Row
+from shapely.geometry import MultiPoint
+from move_base_msgs.msg import MoveBaseAction
+from numpy.linalg import LinAlgError
+import matplotlib.colors as mcol
+import matplotlib
+matplotlib.use('Agg')
+
+from coordinator_numba_funcs import calculate_path_cost, calculate_task_queue_cost
+
+# TODO:
+# - Environment cropping
+# - Visualise sampling points in RViz
+# - Integrate one or two more sophisticated task allocation algorithms*
+# - Dynamic sampling improvements (co-kriging, quadtree environment partitioning, etc.)*
+# * Likely to remain as future work due to scope of the project
+
+rospack = rospkg.RosPack()
+package_path = rospack.get_path('sim_soil_mapping_mrs')
+with open(package_path+'/include/sim_soil_mapping_mrs/ground_truth/interpolated_jaime_compaction_0cm_kpas.pickle', 'rb') as f:
+    ground_truth = pickle.load(f)
+
+node_name = 'coordinator'
+namespace = rospy.get_namespace()
+
+increased_sim_speed = 20#x faster than real time
+env_width = 324 # metres
+env_height = 220 # metres
+robot_init_pose_algorithm = 'random' # 'realistic', 'random', 'random edge', or 'random edge and robot'. Using 'random' to replicate Mesa trials. Future trials will use 'random edge and robot'
+
+# Define parameters (Explanations are in kriging.py)
+# Use Gaussian variogram model
+variogram = 'gaussian'
+
+# Set kriging grid dimensions to those of the environment
+x_grid = np.arange(0, ground_truth.shape[1], 1)
+y_grid = np.arange(0, ground_truth.shape[0], 1)
+
+# Define location and data of sampled points
+x_arr = []
+y_arr = []
+o_arr = []
+id_arr = []
+
+# Performance profiling variables
+avg_queue_cost_times = []
+avg_queue_sort_times = []
+
+class Coordinator:
+    def __init__(self, trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks, trial_name):
+        rospy.init_node(node_name, anonymous=True)
+        rospy.loginfo("Coordinator node initialised")
+        
+        self.trial_num = trial_num
+
+        # Set random seed for reproducibility
+        random.seed(trial_num)
+
+        self.tasks = []
+
+        self.num_robots = num_robots
+        self.ta_algo = ta_algo
+        self.sampling_algo = sampling_algo
+        self.env_crop_factor = env_crop_factor
+        self.figures_path = figures_path
+        self.simulator = simulator
+
+        self.robot_speed = 2.0 # m/s
+        self.bid_function = bid_function # "euclidean_distance", "euclidean_distance_with_insertion", "distance_over_variance", "distance_over_variance_with_insertion", "insertion_weighted_euclidean_distance", "insertion_weighted_distance_over_variance", "distance_times_variance"
+        self.sort_tasks = use_queue_sorting # Sort tasks in task queue to minimise distance travelled by robot
+        self.drop_low_variance_tasks = drop_low_variance_tasks # Drop tasks with low kriging variance from task queue
+        self.trial_name = trial_name # Name of trial, used for bag file name and log file names
+
+        rospy.loginfo("Trial name (coordinator): " + self.trial_name)
+
+        # If root of figures path doesn't exist, create it
+        figures_path_root = self.figures_path.split('/')[:-1]
+        figures_path_root = '/'.join(figures_path_root)
+        if not os.path.exists(figures_path_root):
+            os.mkdir(figures_path_root)
+
+        # Delete existing figures directory if it exists
+        if os.path.exists(self.figures_path):
+            shutil.rmtree(self.figures_path)
+        # Recreate figures directory
+        if not os.path.exists(package_path+'/figures/'):
+            os.mkdir(package_path+'/figures/')
+        os.mkdir(self.figures_path)
+        os.mkdir(self.figures_path+'/sampled_cell_masks/')
+        os.mkdir(self.figures_path+'/kriging_variance_masks/')
+        
+        # # Save visualisation of ground truth
+        # plt.imshow(ground_truth, origin='lower')
+        # plt.colorbar
+        # plt.title('Ground Truth Soil Compaction Data (kPa)')
+        # plt.xlabel('x (m)')
+        # plt.ylabel('y (m)')
+        # plt.savefig(self.figures_path+'/ground_truth.png')
+
+        rospy.loginfo("Arguments: trial_num: {}, num_robots: {}, ta_algo: {}, sampling_algo: {}, env_crop_factor: {}, simulator: {}".format(
+            self.trial_num, self.num_robots, self.ta_algo, self.sampling_algo, self.env_crop_factor, self.simulator))
+        
+        self.rr_rob_index = 0
+
+        if 'grid' in str(self.sampling_algo).lower():
+            self.tasks = self.grid_sampling()
+        elif 'random' in str(self.sampling_algo).lower():
+            self.tasks = self.random_sampling()
+
+        self.sim_time_factor = 1  # Default to 1x sim speed, gets updated by sim_time_factor_callback
+        self.sim_time_factor_sub = rospy.Subscriber("/sim_time_factor", Float64, self.sim_time_factor_callback)
+        self.sim_time_factor_pub = rospy.Publisher("/sim_time_factor", Float64, latch=True, queue_size=1)
+        self.sim_initialized_pub = rospy.Publisher("/sim_initialized", Bool, latch=True, queue_size=1)
+        self.sampling_time_budget_elapsed_pub = rospy.Publisher("/sampling_time_budget_elapsed", Bool, queue_size=1)
+        self.sample_point_markers_pub = rospy.Publisher("/sample_point_markers", Marker, queue_size=10)
+
+        # Initialise marker
+        self.marker = Marker()
+        self.marker.header.frame_id = "map"
+        self.marker.header.stamp = rospy.Time.now()
+        self.marker.ns = "coordinator"
+        self.marker.id = 0
+        self.marker.type = Marker.POINTS
+        self.marker.action = Marker.ADD
+        self.marker.pose.orientation.w = 1.0
+        self.marker.scale.x = 1.0
+        self.marker.scale.y = 1.0
+        self.marker.color.a = 1.0
+        self.marker.color.r = 1.0
+        self.marker.color.g = 1.0
+        self.marker.color.b = 1.0
+        self.marker.points = []
+
+        self.allocated_course_cells = []
+        self.ds_grid_mean_kriging_variance = {}
+        self.sampled_cells_colorbar_plotted = False
+        self.kriging_variance_colorbar_plotted = False
+
+        # Define metrics
+        self.RMSE = -1
+        self.RMSEpub = rospy.Publisher(namespace + node_name + "/" + "RMSE", Float64, queue_size=0, tcp_nodelay=True, latch=True)
+        self.avgVar = -1
+        self.avgVarpub = rospy.Publisher(namespace + node_name + "/" + "avgVar", Float64, queue_size=0, tcp_nodelay=True, latch=True)
+
+        # Per-interpolation data logging dataframe 
+        self.interpolation_log = pd.DataFrame(columns=['Interpolation Start Time',
+                                                       'RMSE',
+                                                       'Mean Kriging Variance',
+                                                       'Tasks Created',
+                                                       'Bids',
+                                                       'Task Allocations',
+                                                       'Interpolation Execution Time (ms)'])
+        self.interpolations = {} # Dict to store information associated with each round of kriging interpolation for logging
+
+        # Initialise kriging maps
+        self.interpolated_map = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
+        self.kriging_variance = np.ones((ground_truth.shape[0], ground_truth.shape[1])) * -1
+        
+        if "dynamic" in str(self.sampling_algo).lower():
+            self.sampled_mask = np.ones((ground_truth.shape[0], ground_truth.shape[1]))
+
+        self.interpolated_map_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+        self.interpolated_map_raw_pub = rospy.Publisher(namespace + node_name + "/" + "interpolated_map_raw", Map, queue_size=0, tcp_nodelay=True, latch=True)
+        self.kriging_variance_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+        self.kriging_variance_raw_pub = rospy.Publisher(namespace + node_name + "/" + "kriging_variance_raw", Map, queue_size=0, tcp_nodelay=True, latch=True)
+
+        # Publish placeholder maps before any data is received
+        interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
+        kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
+
+        ground_truth_ros = self.numpy_array_to_occupancy_grid(ground_truth.astype(np.int8))
+        ground_truth_ros_pub = rospy.Publisher(namespace + node_name + "/" + "ground_truth", OccupancyGrid, queue_size=0, tcp_nodelay=True, latch=True)
+
+        self.interpolated_map_pub.publish(interpolated_map_ros)
+        self.kriging_variance_pub.publish(kriging_variance_ros)
+        ground_truth_ros_pub.publish(ground_truth_ros)
+
+        self.numSamples = 0
+        self.numSamplespub = rospy.Publisher(namespace + node_name + "/" + "numSamples", Int64, queue_size=0, tcp_nodelay=True, latch=True)
+
+        self.use_task_queue_limit = False
+        self.task_queue_len_limit = 3
+
+        # If task allocation algorithm is 'dynamic', partition the environment into a grid,
+        # this is used to address oversampling in the dynamic sampling algorithm
+        if 'dynamic' in str(self.sampling_algo).lower():
+            # ds_grid_resolution = 50 # metres
+            ds_grid_resolution = int(floor(sqrt(env_width * env_height) / 8))
+            ds_grid_x = np.arange(0, env_width, ds_grid_resolution)
+            ds_grid_y = np.arange(0, env_height, ds_grid_resolution)
+            self.ds_grid_x = ds_grid_x
+            self.ds_grid_y = ds_grid_y
+            cell_id_map = []
+            self.course_cell_mean_variances = []
+            for x in range(len(ds_grid_x)):
+                for y in range(len(ds_grid_y)):
+                    cell_id_map.append([x, y])
+
+            # Assign each cell of the kriging grid to a cell of the dynamic sampling grid
+            self.ds_grid = np.ones((env_width, env_height)) * -1
+            rospy.loginfo("Length of ds_grid_x: {}".format(len(ds_grid_x)))
+            rospy.loginfo("Length of ds_grid_y: {}".format(len(ds_grid_y)))
+            for ds_grid_x_ix in range(0, len(ds_grid_x)):
+                for ds_grid_y_ix in range(0, len(ds_grid_y)):
+                    if ds_grid_x_ix == 0:
+                        x_min = 0
+                    else:
+                        x_min = int(floor(ds_grid_x_ix * ds_grid_resolution))
+                    if ds_grid_y_ix == 0:
+                        y_min = 0
+                    else:
+                        y_min = int(floor(ds_grid_y_ix * ds_grid_resolution))
+                    x_max = int(floor((ds_grid_x_ix + 1) * ds_grid_resolution))
+                    y_max = int(floor((ds_grid_y_ix + 1) * ds_grid_resolution))
+
+                    for x in range(x_min, x_max):
+                        for y in range(y_min, y_max):
+                            if x > (env_width - 1) or y > (env_height - 1):
+                                continue
+                            else:
+                                cell_id = cell_id_map.index([ds_grid_x_ix, ds_grid_y_ix])
+                                self.ds_grid[x][y] = cell_id
+            
+            # Plot the dynamic sampling grid
+            plt.figure()
+
+            # Create rotated grid for imshow
+            self.ds_grid_rotated = np.rot90(self.ds_grid)
+
+            # plt.imshow(self.ds_grid_rotated, origin='lower', cmap='jet', interpolation='none')
+            # plt.colorbar()
+
+            # plt.title("Dynamic Sampling Grid")
+            # plt.savefig(self.figures_path+"/ds_grid.png")
+            # plt.close()
+            # rospy.loginfo("Dynamic sampling grid saved to {}".format(package_path+"/figures/ds_grid.png"))
+                            
+        
+        # Set of robots
+        self.robots = ["robot_" + str(r) for r in range(self.num_robots)]
+        self.robot_pose_pubs = {}
+        self.robot_intial_poses = {}
+        self.robot_poses = {}
+        self.robot_pose_subs = {}
+        self.robot_task_queue_subs = {}
+        self.robot_task_queues = {}
+        self.robot_tasks_allocated_count = {}
+        self.robot_ta_fairnesses = {}
+        self.robot_sample_points = {}
+        self.robot_colours = ['lime', 'yellow', 'orange'] # TODO: Match these with the colours used in RViz, make sure they're distinct from heatmap colours
+        self.br_cm = mcol.LinearSegmentedColormap.from_list("br",["b","r"])
+
+        self.robot_tasks_allocated_count_total = 0
+        self.robot_tasks_allocated_count_total_pub = rospy.Publisher(namespace + node_name + "/" + "robot_tasks_allocated_count_total", Int64, queue_size=0, tcp_nodelay=True, latch=True)
+        self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
+
+        self.mean_ta_fairness = -1
+        self.mean_ta_fairness_pub = rospy.Publisher(namespace + node_name + "/" + "mean_ta_fairness", Float64, queue_size=0, tcp_nodelay=True, latch=True)
+        self.mean_ta_fairness_pub.publish(self.mean_ta_fairness)
+
+        self.robot_tasks_allocated_count_pubs = {}
+        self.robot_ta_fairness_pubs = {}
+        self.robot_task_queue_pubs = {}
+        self.robot_action_clients = {}
+        for robot in self.robots:
+            # Initialise sample points arrays
+            self.robot_sample_points[robot] = []
+
+            # Tasks allocated publishers
+            self.robot_tasks_allocated_count[robot] = 0
+            self.robot_tasks_allocated_count_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/tasks_allocated_count", Int64, queue_size=0)
+            self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
+
+            # Task allocation fairness publishers
+            self.robot_ta_fairnesses[robot] = -1
+            self.robot_ta_fairness_pubs[robot] = rospy.Publisher("/" + robot + "/" + node_name + "/ta_fairness", Float64, queue_size=0)
+            self.robot_ta_fairness_pubs[robot].publish(self.robot_ta_fairnesses[robot])
+
+            # Task queue publishers
+            self.robot_task_queue_pubs[robot] = rospy.Publisher("/" + robot + "/sampling_task_queue/set_goal_queue", String, queue_size=0)
+
+            # Robot move_base action clients
+            self.robot_action_clients[robot] = actionlib.SimpleActionClient('/'+ robot +'/move_base', MoveBaseAction)
+            rospy.loginfo("Coordinator's action client for " + robot + " waiting for move_base actionserver...")
+            self.robot_action_clients[robot].wait_for_server()
+            rospy.loginfo("Coordinator's action client for " + robot + " connected to move_base actionserver!")
+
+        for robot in self.robots:
+            if self.simulator == "stage_ros":
+                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/cmd_pose", Pose, queue_size=0)
+            elif self.simulator == "virtual_robots":
+                self.robot_pose_pubs[robot] = rospy.Publisher("/" + robot + "/set_pose", Pose, queue_size=0)
+            self.robot_task_queue_subs[robot] = rospy.Subscriber("/" + robot + "/sampling_task_queue/goal_queue", String, self.robot_task_queue_callback, callback_args=robot)
+            self.robot_pose_subs[robot] = rospy.Subscriber("/" + robot + "/robot_pose", PoseStamped, self.robot_pose_callback, callback_args=robot)
+
+        rospy.loginfo("Robots: " + str(self.robots))
+
+
+    def robot_task_queue_callback(self, msg, robot):
+        # Parse json data
+        data = msg.data
+        data = data.replace("'", '"')
+        data = json.loads(data)
+
+        self.robot_task_queues[robot] = data
+
+    
+    def robot_pose_callback(self, msg, robot):
+        self.robot_poses[robot] = msg
+
+    
+    def sim_time_factor_callback(self, msg):
+        self.sim_time_factor = msg.data
+    
+
+    def grid_sampling(self):
+        # Create grid of points to sample
+        # 20 points spread evenly across the x axis, with a 5% margin on each of the edges
+        sample_grid_x = np.linspace(min(x_grid) + max(x_grid) * 0.05, max(x_grid) - max(x_grid) * 0.05, 10)
+        # 20 points spread evenly across the y axis, with a 5% margin on each of the edges
+        sample_grid_y = np.linspace(min(y_grid) + max(y_grid) * 0.05, max(y_grid) - max(y_grid) * 0.05, 10)
+        
+        points = MultiPoint(np.transpose([np.tile(sample_grid_x, len(sample_grid_y)), np.repeat(sample_grid_y,
+                                                                                           len(sample_grid_x))]))
+        # plt.imshow(ground_truth, origin="lower")
+        # plt.colorbar()
+        # # Plot X and Y of points.geoms tuples
+        # plt.plot([p.x for p in points.geoms], [p.y for p in points.geoms], 'ro')
+        # plt.title("Ground-truth with Sampling Grid")
+        # plt.savefig(self.figures_path+'/ground_truth_and_sampling.png')
+        # rospy.loginfo("Saved ground truth and sampling grid plot to " + package_path + "/figures/ground_truth_and_sampling.png")
+        
+        # Convert points.geoms into list of tuples and return
+        return [(p.x, p.y) for p in points.geoms]
+    
+
+    def random_sampling(self):
+        # Create random points to sample
+        points = [(np.random.uniform(min(x_grid), max(x_grid)), np.random.uniform(min(y_grid),
+                    max(y_grid))) for _ in range(self.num_robots)]
+        # plt.imshow(ground_truth, origin="lower")
+        # plt.colorbar()
+        # # Plot X and Y of tuples
+        # plt.plot([p[0] for p in points], [p[1] for p in points], 'ro')
+        # plt.title("Ground truth with initial random sampling")
+        # plt.savefig(self.figures_path+'/ground_truth_and_random_sampling.png')
+        # rospy.loginfo("Saved ground truth and random sampling plot to " + package_path + "/figures/ground_truth_and_random_sampling.png")
+
+        return points
+    
+
+    def dynamic_sampling(self):
+        # Get the x highest mean kriging variance course-grain cells, where x is the number of robots
+        points = []
+
+        # Get the mean kriging variance for each cell in the dynamic sampling grid
+        num_sampling_grid_cells = len(self.ds_grid_x) * len(self.ds_grid_y)
+        self.ds_grid_mean_kriging_variance = {}
+        for cell_id in range(num_sampling_grid_cells):
+            # Get the indices of the cells in the dynamic sampling grid that belong to the current cell_id
+            cell_indices = np.argwhere(self.ds_grid == cell_id)
+            # Get the mean kriging variance of the current cell_id
+            self.ds_grid_mean_kriging_variance[cell_id] = np.mean(self.kriging_variance[cell_indices[:, 0:-1], cell_indices[:, 1:-1]])
+
+        # Exclude the cells that have already been allocated
+        for cell_id in self.allocated_course_cells:
+            try:
+                self.ds_grid_mean_kriging_variance.pop(cell_id)
+            except KeyError:
+                pass
+
+        # Get the `num_robots` highest mean kriging variance cells
+        sorted_ds_grid_mean_kriging_variance = sorted(copy.deepcopy(self.ds_grid_mean_kriging_variance).items(), key=operator.itemgetter(1), reverse=True)
+
+        goal_cells = []
+        # Exclude these cells from future rounds of dynamic sampling
+        for cell_id, _ in sorted_ds_grid_mean_kriging_variance[:self.num_robots]:
+            self.allocated_course_cells.append(cell_id)
+            goal_cells.append(cell_id)
+
+        # Get the highest kriging variance cell (point) in each of the more course-grain cells which have the highest mean kriging variance
+        for cell_id in goal_cells:
+            # Get the indices of the cells in the dynamic sampling grid that belong to the current cell_id
+            cell_indices = np.argwhere(self.ds_grid == cell_id)
+            # Crop self.kriging_variance to the current cell_id
+            # cell_kriging_variance = self.kriging_variance[np.min(cell_indices[:, 0]):np.max(cell_indices[:, 0]),
+            #                                               np.min(cell_indices[:, 1]):np.max(cell_indices[:, 1])]
+            cell_kriging_variance = self.kriging_variance[np.min(cell_indices[:, 1]):np.max(cell_indices[:, 1]),
+                                                          np.min(cell_indices[:, 0]):np.max(cell_indices[:, 0])]
+
+            # Get the highest kriging variance cell in the current cell_id
+            highest_kriging_variance_cell = np.argmax(cell_kriging_variance)
+            # Get the x and y coordinates of the highest kriging variance cell
+            point = (cell_indices[highest_kriging_variance_cell][0], cell_indices[highest_kriging_variance_cell][1])
+
+            points.append(point)
+
+        # rospy.loginfo("New dynamic sampling goals: " + str(points))
+        return points
+
+
+    def calculate_task_queue_cost_DOV(self, robot_position, task_queue, robot_speed):
+        # Calculate cost of task queue as sum of Euclidean distances between each task
+        cost = 0
+        for i in range(len(task_queue) - 1):
+            if (self.kriging_variance[int(task_queue[i+1][1]), int(task_queue[i+1][0])]*1) < 0:
+                cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed)
+            else:
+                cost += calculate_path_cost(task_queue[i], task_queue[i+1], robot_speed) / (self.kriging_variance[int(task_queue[i+1][1]), int(task_queue[i+1][0])]*1)
+            # print("Cumulative cost up to task " + str(i) + " of " + str(len(task_queue)) + ": " + str(cost))
+            # print("Task: " + str(task_queue[i]) + ". Next task: " + str(task_queue[i+1]))
+            # print("Kriging variance at next task: " + str(self.kriging_variance[int(task_queue[i+1][1]), int(task_queue[i+1][0])] * 1))
+
+        return cost
+    
+    def rr_ta(self):  # Round Robin Task Allocation
+        rospy.loginfo("Executing Round Robin Task Allocation...")
+        ta = {}
+        for robot in self.robots:
+            ta[robot] = []
+        # print("Robots are: " + str(self.robots))
+        for _ in range(len(self.tasks)):
+            if len(self.tasks) > 0:
+                task = self.tasks.pop(0)
+                # print("Robot ID for current allocation is " + str(self.rr_rob_index))
+                ta["robot_" + str(self.rr_rob_index)].append(task)
+                if self.rr_rob_index == len(self.robots) - 1:
+                    self.rr_rob_index = 0
+                else:
+                    self.rr_rob_index += 1
+        return ta
+    
+
+    def ssi_ta(self): # Sequential Single-Item Task Allocation
+        rospy.loginfo("Executing Sequential Single-Item Task Allocation...")
+        ta = {}
+        for robot in self.robots:
+            ta[robot] = []
+        # print("Robots are: " + str(self.robots))
+        for _ in range(len(self.tasks)):
+            if len(self.tasks) > 0:
+                task = self.tasks.pop(0)
+
+                try:
+                    self.interpolations[str(self.numSamples)]["Bids"][str(task)] = {}
+                except KeyError:
+                    pass
+
+                bids = []
+                min_cost_indices = []
+                for robot in self.robots:
+                    # Get robot position
+                    if self.simulator == "stage_ros":
+                        robot_pose_msg = rospy.wait_for_message("/" + robot + "/amcl_pose", PoseWithCovarianceStamped)
+                        robot_pose_msg = rospy.wait_for_message("/" + robot + "/robot_pose", PoseStamped)
+                    elif simulator == "virtual_robots":
+                        robot_pose_msg = self.robot_poses[robot]
+                        robot_position = (robot_pose_msg.pose.position.x, robot_pose_msg.pose.position.y)
+
+                    # Get robot task queue length and check if it exceeds the limit
+                    task_queue_full = False
+                    if (self.use_task_queue_limit) and (len(self.robot_task_queues[robot]) >= self.task_queue_len_limit):
+                        rospy.loginfo("Task queue for robot " + robot + " is full. Skipping task allocation for this robot.")
+                        task_queue_full = True
+
+                    if not task_queue_full:
+                        # Calculate bid as cost of path between robot and all tasks in their task queue, for each possible insertion of the new task
+                        if self.bid_function == "euclidean_distance_with_insertion":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+
+                                robot_tasks_sanitised = []
+                                for task_position in copy.deepcopy(task_queue):
+                                    # Handle task where insertion index is given as well as position
+                                    if type(task_position[0]) != np.int64 and type(task_position[0]) != float and type(task_position[0]) != int:
+                                        if len(task_position[0]) == 2:
+                                            task_position = task_position[0]
+                                    robot_tasks_sanitised.append(task_position)
+                                robot_tasks_sanitised = np.array(robot_tasks_sanitised)
+                                # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
+                                # start = perf_counter()
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed)
+                                cost += calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
+                                # end = perf_counter()
+
+                                # avg_queue_cost_times.append((end - start) * 1000)
+
+                                # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
+
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost
+
+                        # Calculate bid as cost of path between robot and new task, multiplied by task insertion idex ((Euclidean distance * robot speed) * (insertion index + 1)), with cheapest-insertion heuristic. Note that insertion index is 0-indexed, hence +1
+                        elif self.bid_function == "insertion_weighted_euclidean_distance":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+
+                                robot_tasks_sanitised = []
+                                for task_position in copy.deepcopy(task_queue):
+                                    # Handle task where insertion index is given as well as position
+                                    if type(task_position[0]) != np.int64 and type(task_position[0]) != float and type(task_position[0]) != int:
+                                        if len(task_position[0]) == 2:
+                                            task_position = task_position[0]
+                                    robot_tasks_sanitised.append(task_position)
+                                robot_tasks_sanitised = np.array(robot_tasks_sanitised)
+                                # cost = calculate_task_queue_cost(robot_position, task_queue, self.robot_speed)
+                                # start = perf_counter()
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed)
+                                cost += calculate_task_queue_cost(robot_position, robot_tasks_sanitised, self.robot_speed)
+                                # end = perf_counter()
+
+                                # avg_queue_cost_times.append((end - start) * 1000)
+
+                                # rospy.loginfo("Mean time to calculate task queue cost: " + str(np.mean(avg_queue_cost_times)) + "ms")
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
+
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost * (min_cost_index + 1)
+
+                        # Calculate bid as cost of path between robot and new task (Euclidean distance * robot speed)
+                        elif self.bid_function == "euclidean_distance":
+                            bid = calculate_path_cost(robot_position, task, self.robot_speed)
+
+                        # Calculate bid as Euclidean distance over kriging variance at task position
+                        elif self.bid_function == "distance_over_variance":
+                            # Calculate bid
+                            bid = calculate_path_cost(robot_position, task, self.robot_speed) / self.kriging_variance[int(task[1]), int(task[0])]
+                        # elif self.bid_function == "distance_times_variance":
+                        #     bid = calculate_path_cost(robot_position, task, self.robot_speed) * self.kriging_variance[int(self.robot_poses[robot].pose.position.y), int(self.robot_poses[robot].pose.position.x)]
+                        
+                        # Calculate bid as Euclidean distance over kriging variance at task position, with cheapest-insertion heuristic
+                        elif self.bid_function == "distance_over_variance_with_insertion":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
+                                cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost
+                        # Calculate bid as Euclidean distance over kriging variance at task position, multiplied by task insertion index ((Euclidean distance * robot speed) * (insertion index + 1)), with cheapest-insertion heuristic. Note that insertion index is 0-indexed, hence +1
+                        elif self.bid_function == "insertion_weighted_distance_over_variance":
+                            min_cost = float("inf")
+                            min_cost_index = 0
+                            robot_task_queue = self.robot_task_queues[robot]
+                            for i in range(len(robot_task_queue) + 1):
+                                task_queue = robot_task_queue[0:i] + [task] + robot_task_queue[i:]
+                                cost = calculate_path_cost(robot_position, task, self.robot_speed) / (self.kriging_variance[int(task[1]), int(task[0])]*1)
+                                cost += self.calculate_task_queue_cost_DOV(robot_position, task_queue, self.robot_speed)
+                                if cost < min_cost:
+                                    min_cost = cost
+                                    min_cost_index = i
+                            min_cost_indices.append(min_cost_index)
+                            bid = min_cost * (min_cost_index + 1)
+
+                        # Add bids to interpolation log (key of bids dict is the task (x,y) position, value is a dict with robot IDs as keys and bids as values)
+                        try:
+                            self.interpolations[str(self.numSamples)]["Bids"][str(task)]["robot_" + str(self.robots.index(robot))] = bid
+                        except KeyError:
+                            pass
+                        bids.append(bid)
+                    
+                # rospy.loginfo("\nTask: " + str(task) + ". Bids:")
+                # for b in range(len(bids)):
+                #     rospy.loginfo("robot_"+str(b)+": " + str(bids[b]))
+
+                if self.bid_function == "euclidean_distance_with_insertion" or self.bid_function == "distance_over_variance_with_insertion" or self.bid_function == "insertion_weighted_euclidean_distance" or self.bid_function == "insertion_weighted_distance_over_variance":
+                    # Get index of min bid
+                    min_bid_index = bids.index(min(bids))
+                    insert_index = min_cost_indices[min_bid_index]
+
+                    rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
+                    rospy.loginfo("Insertion index: " + str(insert_index))
+
+                    ta["robot_" + str(min_bid_index)].append([task, insert_index])
+                    rospy.loginfo("Task allocations for robot " + "robot_" + str(min_bid_index) + ": " + str(ta["robot_" + str(min_bid_index)]))
+                elif self.bid_function == "euclidean_distance" or self.bid_function == "distance_over_variance":
+                    # Get index of min bid
+                    min_bid_index = bids.index(min(bids))
+
+                    # rospy.loginfo("robot_"+str(min_bid_index)+" wins with bid: " + str(bids[min_bid_index]))
+
+                    ta["robot_" + str(min_bid_index)].append([task, -1])
+
+        # if self.sort_tasks:
+        #     rospy.loginfo("Sorting task queues to minimize distance travelled by robots...")
+        #     # Sort each robot's task queue to minimize the distance they must travel to reach all their tasks
+        #     for robot in self.robots:
+        #         if len(ta[robot]) > 0 and type(ta[robot][0]) != tuple:
+        #             # rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+
+        #             robot_tasks_sanitised = []
+        #             for task_position in copy.deepcopy(ta[robot]):
+        #                 # Handle task where insertion index is given as well as position
+        #                 if type(task_position[0]) != np.int64 and type(task_position[0]) != float:
+        #                     if len(task_position[0]) == 2:
+        #                         task_position = task_position[0]
+        #                 robot_tasks_sanitised.append(task_position)
+
+        #             # sorted_tasks = sorted(ta[robot], key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
+        #             # start = perf_counter()
+        #             sorted_tasks = sorted(robot_tasks_sanitised, key=lambda x: calculate_path_cost(robot_position, x, coordinator.robot_speed))
+        #             # end = perf_counter()
+
+        #             # avg_queue_sort_times.append((end - start) * 1000)
+
+        #             # rospy.loginfo("Mean time to sort task queue: " + str(np.mean(avg_queue_sort_times)) + "ms")
+        #             ta[robot] = sorted_tasks
+        #         # elif len(ta[robot]) > 0 and type(ta[robot][0]) == tuple:
+        #         #     rospy.loginfo("Unsorted task queue for robot " + robot + ": " + str(ta[robot]))
+        #         #     sorted_tasks = sorted(ta[robot], key=lambda x: self.calculate_path_cost(robot_position, x))
+        #         #     ta[robot] = sorted_tasks
+        rospy.loginfo("Task allocations from SSI: " + str(ta))
+        
+        return ta
+
+
+    def publish_ta(self, task_allocations):
+        # rospy.loginfo("Task allocations: " + str(task_allocations))
+        # If using dynamic sampling, insert tasks using given index, rather than adding them to the end of the queue
+        # Publish task allocations to robots
+        rospy.loginfo("Publishing task allocations to robots:")
+        rospy.loginfo(task_allocations)
+
+        # Log task allocations in interpolation log
+        try:
+            self.interpolations[str(self.numSamples)]["Task Allocations"] = task_allocations
+        except KeyError:
+            pass
+
+        for robot in self.robots:
+            if self.ta_algo == "SSI" and len(task_allocations[robot]) > 0 and type(task_allocations[robot][0]) != tuple:
+                new_task_topic = "/" + robot + "/sampling_task_queue/insert_goal"
+                new_task_pub = rospy.Publisher(new_task_topic, InsertTask, queue_size=0,
+                                            tcp_nodelay=True, latch=True)
+                task_count = 0
+                # rospy.loginfo("Task queue for robot " + robot + ": " + str(task_allocations[robot]))
+                for task in task_allocations[robot][::-1]:
+                    # print("Task: " + str(task))
+                    # print("Task type: " + str(type(task)))
+                    # print("Task length: " + str(len(task)))
+                    task_goal = MoveBaseGoal()
+                    task_goal.target_pose.header.frame_id = "map"
+                    
+                    if type(task) == np.ndarray and len(task) == 2:
+                        task_goal.target_pose.pose.position.x = task[0]
+                        task_goal.target_pose.pose.position.y = task[1]
+                        if task_goal.target_pose.pose.orientation.w == 0:
+                            task_goal.target_pose.pose.orientation.w = 1.0
+                    else:
+                        # rospy.loginfo("Task: " + str(task))
+                        # rospy.loginfo("Task shape: " + str(np.array(task).shape))
+                        # if np.array(task).shape == (1, 2):
+                        #     task_goal.target_pose.pose.position.x = task[0][0]
+                        #     task_goal.target_pose.pose.position.y = task[0][1]
+                        # elif np.array(task).shape == (2,):
+                        #     task_goal.target_pose.pose.position.x = task[0]
+                        #     task_goal.target_pose.pose.position.y = task[1]
+                        task_goal.target_pose.pose.position.x = task[0][0]
+                        task_goal.target_pose.pose.position.y = task[0][1]
+                        task_goal.target_pose.pose.orientation.w = 1.0
+
+                    insert_task_msg = InsertTask()
+                    insert_task_msg.goal = task_goal
+                    insert_task_msg.index = task[1]
+                    new_task_pub.publish(insert_task_msg)
+                    # rospy.loginfo("Publishing task to " + robot + ": " + str(task))
+                    # Delay after 1st task to allow robots to start moving
+                    if task_count == 0:
+                        rospy.sleep(2)
+                    else:
+                        rospy.sleep(0.1)
+                    task_count += 1
+
+                    # Update task allocation count
+                    self.robot_tasks_allocated_count[robot] += 1
+                    self.robot_tasks_allocated_count_total += 1
+                    self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
+                    self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
+
+                    # Calculate and publish per-robot and mean task allocation fairness
+                    equal_ta_proportion = 1 / self.num_robots
+                    self.robot_ta_fairnesses[robot] = 1 - abs(equal_ta_proportion - self.robot_tasks_allocated_count[robot] / self.robot_tasks_allocated_count_total)
+                    self.robot_ta_fairness_pubs[robot].publish(self.robot_ta_fairnesses[robot])
+
+                    # Check if at least one of the robots has been allocated a task, and if so, recalculate each robot's task allocation fairness
+                    first_task_allocated = False
+                    for robot in self.robots:
+                        if self.robot_tasks_allocated_count[robot] > 0:
+                            first_task_allocated = True
+                            break
+
+                    if first_task_allocated:
+                        for robot in self.robots:
+                            self.robot_ta_fairnesses[robot] = 1 - abs(equal_ta_proportion - self.robot_tasks_allocated_count[robot] / self.robot_tasks_allocated_count_total)
+                            self.robot_ta_fairness_pubs[robot].publish(self.robot_ta_fairnesses[robot])
+
+                        self.mean_ta_fairness = np.mean(list(self.robot_ta_fairnesses.values()))
+                        self.mean_ta_fairness_pub.publish(self.mean_ta_fairness)
+            else:
+                new_task_topic = "/" + robot + "/sampling_task_queue/add_goal"
+                new_task_pub = rospy.Publisher(new_task_topic, MoveBaseGoal, queue_size=0,
+                                            tcp_nodelay=True, latch=True)
+                task_count = 0
+                for task in task_allocations[robot][::-1]:
+                    task_goal = MoveBaseGoal()
+                    task_goal.target_pose.header.frame_id = "map"
+                    task_goal.target_pose.pose.position.x = task[0]
+                    task_goal.target_pose.pose.position.y = task[1]
+                    task_goal.target_pose.pose.orientation.w = 1.0
+                    new_task_pub.publish(task_goal)
+                    # rospy.loginfo("Publishing task to " + robot + ": " + str(task))
+                    # Delay after 1st task to allow robots to start moving
+                    if task_count == 0:
+                        rospy.sleep(2)
+                    else:
+                        rospy.sleep(0.1)
+                    task_count += 1
+
+                    # Update task allocation count
+                    self.robot_tasks_allocated_count[robot] += 1
+                    self.robot_tasks_allocated_count_total += 1
+                    self.robot_tasks_allocated_count_pubs[robot].publish(self.robot_tasks_allocated_count[robot])
+                    self.robot_tasks_allocated_count_total_pub.publish(self.robot_tasks_allocated_count_total)
+
+    def interpolate_and_visualise(self, data):
+        # print("New sample data received:")
+
+        # Perform kriging interpolation from values sampled by the robots
+        # Parse json data
+        data = data.replace("'", '"')
+        data = json.loads(data)
+        # rospy.loginfo("Robot ID: " + str(data["robot_id"]))
+        # rospy.loginfo("X: " + str(data["x"]))
+        # rospy.loginfo("Y: " + str(data["y"]))
+        # rospy.loginfo("Reading: " + str(data["reading"]))
+
+        x = data["x"]
+        y = data["y"]
+
+        if (x, y) != (self.robot_poses[data['robot_id']].pose.position.x, self.robot_poses[data['robot_id']].pose.position.y):
+            (x, y) = (self.robot_poses[data['robot_id']].pose.position.x, self.robot_poses[data['robot_id']].pose.position.y)
+
+        p = Point()
+        p.x = x
+        p.y = y
+        p.z = 0
+        self.marker.points.append(p)
+        self.sample_point_markers_pub.publish(self.marker)
+        
+        x_arr.append(x)
+        y_arr.append(y)
+        o_arr.append(float(data["reading"]))
+        id_arr.append(data["robot_id"])
+
+        c_arr = []
+        for i in range(len(id_arr)):
+            if id_arr[i] == "robot_0":
+                c_arr.append('r')
+            elif id_arr[i] == "robot_1":
+                c_arr.append('g')
+        
+        # Need at least 3 points to interpolate
+        if len(x_arr) > 2:
+            print("Setting sim. speed to 1x while interpolating...")
+
+            # Set sim speed to 1x
+            self.sim_time_factor_pub.publish(1.0)
+
+            # Run interpolation of sampled points
+            rospy.loginfo("Interpolating, please wait...")
+            self.interpolation_start_ros_time = rospy.get_time()
+            self.interpolation_start_wall_time = time.time()
+
+            interpolation_successful = True
+            
+            try:
+                m, v = predict_by_kriging(x_grid, y_grid, x_arr, y_arr, o_arr, variogram=variogram)
+                # Calculate interpolation metrics
+                RMSE = np.sqrt(np.mean((m - ground_truth) ** 2))
+                avgVar = np.mean(v)
+            except LinAlgError:
+                interpolation_successful = False
+                rospy.logwarn("LinAlgError occurred, skipping interpolation...")
+                
+
+            if interpolation_successful:
+                # Check if mean variance is not extremely high (this can sometimes happen due to a bug in the kriging library)
+                print("Mean kriging variance: " + str(avgVar))
+                if (avgVar > -1) or (abs(avgVar) <= 900):
+                    try:
+                        self.RMSE = RMSE
+                        self.avgVar = avgVar
+
+                        self.interpolated_map, self.kriging_variance = m, v
+
+                        # Create Map for raw kriging interpolation data
+                        interpolated_map_ros_raw = Map()
+                        for row in self.interpolated_map:
+                            interpolated_map_ros_raw.row.append(Row(list(row)))
+
+                        # Create Map for raw kriging variance data
+                        kriging_variance_ros_raw = Map()
+                        for row in self.kriging_variance:
+                            kriging_variance_ros_raw.row.append(Row(list(row)))
+
+                        self.interpolated_map_raw_pub.publish(interpolated_map_ros_raw)
+                        self.kriging_variance_raw_pub.publish(kriging_variance_ros_raw)
+
+                        # Publish interpolation maps
+                        interpolated_map_ros = self.numpy_array_to_occupancy_grid(self.interpolated_map.astype(np.int8))
+                        kriging_variance_ros = self.numpy_array_to_occupancy_grid(self.kriging_variance.astype(np.int8))
+
+                        interpolated_map_ros = self.normalise_occupancy_grid_for_rviz(interpolated_map_ros)
+                        kriging_variance_ros = self.normalise_occupancy_grid_for_rviz(kriging_variance_ros)
+
+                        self.interpolated_map_pub.publish(interpolated_map_ros)
+                        self.kriging_variance_pub.publish(kriging_variance_ros)
+
+                        # Populate interpolation data dictionary
+                        self.interpolations[str(self.numSamples)] = {
+                            'Interpolation Start Time': self.interpolation_start_ros_time,
+                            "RMSE": self.RMSE,
+                            "Mean Kriging Variance": self.avgVar,
+                            "Tasks Created": [],
+                            "Bids": {},
+                            "Task Allocations": {},
+                            "Interpolation Execution Time": time.time() - self.interpolation_start_wall_time
+                        }
+                    except LinAlgError:
+                        rospy.logwarn("LinAlgError occurred during interpolation")
+                        interpolation_successful = False
+                else:
+                    rospy.logwarn("Extreme mean kriging variance, skipping interpolation...")
+                    interpolation_successful = False
+
+            if interpolation_successful:
+                rospy.loginfo("Interpolation complete")
+            else:
+                rospy.logwarn("Interpolation incorrect due to PyKrige bug, skipping...")
+            print("Setting sim. speed back to " + str(increased_sim_speed) + "x...")
+            self.sim_time_factor_pub.publish(increased_sim_speed)
+        else:
+            rospy.loginfo("Need at least 3 samples to interpolate, we have " + str(len(x_arr)))
+
+    def numpy_array_to_occupancy_grid(self, numpy_array): # Convert numpy array to OccupancyGrid message
+        # Upscale numpy array by 20x for better visualisation
+        numpy_array = cv2.resize(numpy_array, (numpy_array.shape[1]*20, numpy_array.shape[0]*20), interpolation=cv2.INTER_NEAREST)
+
+        # Create OccupancyGrid message
+        occupancy_grid = OccupancyGrid()
+        occupancy_grid.header.frame_id = "map"
+        occupancy_grid.info.resolution = 0.05
+        occupancy_grid.info.width = numpy_array.shape[1]
+        occupancy_grid.info.height = numpy_array.shape[0]
+        occupancy_grid.info.origin.position.x = 0
+        occupancy_grid.info.origin.position.y = 0
+        occupancy_grid.info.origin.position.z = 0
+        occupancy_grid.info.origin.orientation.x = 0
+        occupancy_grid.info.origin.orientation.y = 0
+        occupancy_grid.info.origin.orientation.z = 0
+        occupancy_grid.info.origin.orientation.w = 1
+        occupancy_grid.data = numpy_array.flatten().tolist()
+
+        return occupancy_grid
+    
+    def normalise_occupancy_grid_for_rviz(self, occupancy_grid): # Normalise occupancy grid for visualisation in RViz
+        # Cap values at 0 and 98 range for RViz costmap visualisation
+        for i in range(len(occupancy_grid.data)):
+            if occupancy_grid.data[i] < 1:
+                occupancy_grid.data[i] = 1
+            elif occupancy_grid.data[i] > 98:
+                occupancy_grid.data[i] = 98
+
+        return occupancy_grid
+    
+    def random_edge_pose(self):
+        # Choose random pose within 5m of the edge of the environment
+        pose = Pose()
+        
+        # Choose random edge
+        edge = random.randint(0, 3)
+        
+        if edge == 0: # North
+            pose.position.x = random.uniform(1, env_width-1)
+            pose.position.y = random.uniform(env_height-6, env_height-1)
+        elif edge == 1: # East
+            pose.position.x = random.uniform(env_width-6, env_width-1)
+            pose.position.y = random.uniform(1, env_height-1)
+        elif edge == 2: # South
+            pose.position.x = random.uniform(1, env_width-1)
+            pose.position.y = random.uniform(1, 6)
+        elif edge == 3: # West
+            pose.position.x = random.uniform(1, 6)
+            pose.position.y = random.uniform(1, env_height-1)
+        
+        if simulator == "stage_ros":
+            # Convert position from stage coordinates to ROS coordinates
+            pose.position.x = pose.position.x - env_width/2
+            pose.position.y = pose.position.y - env_height/2
+
+        pose.orientation.w = 1
+
+        return pose
+    
+    def new_sample_callback(self, data):
+        self.numSamples += 1
+        
+        # Decode JSON data 
+        data_json = copy.deepcopy(data)
+
+        data_json = str(data_json.data).replace("'", '"')
+        data_json = json.loads(data_json)
+
+        sample_position = (data_json["x"], data_json["y"])
+        sample_position_int = (int(data_json["x"]), int(data_json["y"]))
+
+        # Append to per-robot sample array
+        self.robot_sample_points[data_json["robot_id"]].append(sample_position)
+
+        # Generate new sampling goals
+        print("Setting sim. speed to 1x while processing new sample...")
+
+        # Set sim speed to 1x
+        self.sim_time_factor_pub.publish(1.0)
+
+        if self.sampling_algo == "dynamic":
+            # Update sampled cells mask
+            
+
+            cluster_id = self.ds_grid[int(data_json["x"])][int(data_json["y"])]
+            self.sampled_mask[np.flipud(self.ds_grid_rotated) == cluster_id] = -1
+            
+            # Save visualisation of sampled cells mask
+            if self.numSamples % 1 == 0: # Save every 1 samples
+                plt.imshow(self.sampled_mask, origin='lower', cmap="gray")
+                plt.title("Sampled Cells Mask")
+                plt.colorbar()
+
+                # Overlay per-robot sampling points as scatter plot
+                for robot in self.robots:
+                    robot_sample_points = self.robot_sample_points[robot]
+                    if len(robot_sample_points) > 0:
+                        robot_sample_points = np.array(robot_sample_points)
+                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])],
+                                    label=robot)
+                        plt.plot(robot_sample_points[:, 0], robot_sample_points[:, 1], c=self.robot_colours[int(robot.split("_")[1])])
+                plt.legend()
+
+                plt.annotate("Min: " + str(np.round(np.min(self.sampled_mask), 2)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Max: " + str(np.round(np.max(self.sampled_mask), 2)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Time: " + str(int(rospy.get_time()))+"s", (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("# of samples: " + str(self.numSamples), (0, 0), (80, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Sample position: " + str(sample_position_int), (0, 0), (80, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Cluster ID: " + str(int(cluster_id)), (0, 0), (80, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.savefig(self.figures_path+"/sampled_cell_masks/sampled_mask_" + str(self.numSamples) + ".png")
+                plt.close()
+
+                # Save visualisation of kriging variance with sampled cells mask applied
+                variance_masked = self.kriging_variance * self.sampled_mask
+                plt.imshow(variance_masked, origin='lower', cmap="gray")
+                plt.title("Kriging Variance x Sampled Cells Matrix")
+                plt.colorbar()
+
+                # Overlay per-robot sampling points as scatter plot
+                for robot in self.robots:
+                    robot_sample_points = self.robot_sample_points[robot]
+                    if len(robot_sample_points) > 0:
+                        robot_sample_points = np.array(robot_sample_points)
+                        plt.scatter(robot_sample_points[:, 0], robot_sample_points[:, 1], s=20, c=self.robot_colours[int(robot.split("_")[1])],
+                                    label=robot)
+                        plt.plot(robot_sample_points[:, 0], robot_sample_points[:, 1], c=self.robot_colours[int(robot.split("_")[1])])
+                plt.legend()
+
+                plt.annotate("Min: " + str(np.round(np.min(variance_masked), 2)), (0, 0), (0, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Max: " + str(np.round(np.max(variance_masked), 2)), (0, 0), (0, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Mean: " + str(np.round(np.mean(variance_masked), 2)), (0, 0), (0, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Median: " + str(np.round(np.median(variance_masked), 2)), (0, 0), (80, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Time: " + str(int(rospy.get_time()))+"s", (0, 0), (80, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("# of samples: " + str(self.numSamples), (0, 0), (80, -60), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Sample position: " + str(sample_position_int), (0, 0), (170, -20), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.annotate("Cluster ID: " + str(int(cluster_id)), (0, 0), (170, -40), xycoords='axes fraction', textcoords='offset points', va='top')
+                plt.savefig(self.figures_path+"/kriging_variance_masks/kriging_variance_mask_" + str(self.numSamples) + ".png")
+                plt.close()
+
+        self.metricPubNumSamples()
+        self.interpolate_and_visualise(data.data)
+        self.metricPubRMSE()
+        self.metricPubAvgVariance()
+
+        queues_full = False
+            
+        task_queue_lens = []
+        for robot in self.robots:
+            task_queue_lens.append(len(self.robot_task_queues[robot]))
+        if (np.min(task_queue_lens) >= self.task_queue_len_limit) and (self.use_task_queue_limit):
+            queues_full = True
+
+        if not queues_full:
+            if "grid" not in self.sampling_algo:
+                if "random" in self.sampling_algo:
+                    self.tasks += self.random_sampling()
+                elif "dynamic" in self.sampling_algo and self.numSamples >= 2:
+                    if np.mean(self.kriging_variance) >= -1:
+                        rospy.loginfo("Generating sampling goals with dynamic sampling...")
+                        self.tasks += self.dynamic_sampling()
+                
+                if self.drop_low_variance_tasks.lower() == "true":
+                    # Drop tasks where kriging variance at the task position is less than the median of positive kriging variance values
+                    # This is to avoid robots sampling in areas where the kriging variance has become very low
+
+                    # Filter to just the positive kriging variance values
+                    kriging_variance_positive = self.kriging_variance[self.kriging_variance > 0]
+                    
+                    # Calculate the median of the positive kriging variance values
+                    kriging_variance_median = np.median(kriging_variance_positive)
+                    kriging_variance_threshold = kriging_variance_median * 0.75
+                    rospy.loginfo("Dropping tasks with kriging variance less than median of positive kriging variance values...")
+                    rospy.loginfo("Median positive kriging variance: " + str(kriging_variance_median))
+                    rospy.loginfo("Threshold: " + str(kriging_variance_threshold))
+
+                    # Drop tasks from created tasks list where kriging variance is less than the median of positive kriging variance values
+                    tasks_to_drop = []
+                    for task in self.tasks:
+                        print("Task: " + str(task))
+                        print("Task kriging variance: " + str(self.kriging_variance[int(task[1]), int(task[0])]))
+                        print("Threshold: " + str(kriging_variance_threshold) + "\n")
+                        if self.kriging_variance[int(task[1]), int(task[0])] < (kriging_variance_threshold):
+                            tasks_to_drop.append(task)
+                    rospy.loginfo("Dropping " + str(len(tasks_to_drop)) + " tasks...")
+                    rospy.loginfo("Tasks:" + str(self.tasks))
+                    rospy.loginfo("Tasks to drop: " + str(tasks_to_drop))
+                    
+                    # Get indices of tasks to drop
+                    tasks_to_drop_indices = []
+                    tasks_as_strings = []
+                    for task in self.tasks:
+                        tasks_as_strings.append(str(task))
+
+                    for task in tasks_to_drop:
+                        tasks_to_drop_indices.append(tasks_as_strings.index(str(task)))
+                    
+                    # Drop tasks from list
+                    self.tasks = np.array(self.tasks)
+                    self.tasks = np.delete(self.tasks, tasks_to_drop_indices, axis=0)
+                    self.tasks = self.tasks.tolist()
+                    rospy.loginfo("Remaining new tasks: " + str(self.tasks))
+
+                if len(self.tasks) > 0:
+                    try:
+                        self.interpolations[str(self.numSamples)]["Tasks Created"] = [tuple(task) for task in self.tasks]
+                    except KeyError:
+                        pass
+                
+                if "round" in str(self.ta_algo).lower() or "robin" in str(self.ta_algo).lower() or "rr" in str(self.ta_algo).lower():
+                    rospy.loginfo("Round robin running with ta_algo selected: " + str(self.ta_algo))
+                    self.publish_ta(self.rr_ta())
+                if "SSI" in str(self.ta_algo).upper():
+                    rospy.loginfo("SSI running with ta_algo selected: " + str(self.ta_algo))
+                    self.publish_ta(self.ssi_ta())
+        else:
+            rospy.loginfo("Task queues are full, skipping task creation...")
+
+        self.interpolation_log = pd.DataFrame.from_dict(self.interpolations, orient='index')
+
+        # Name index column as 'interpolation_time'
+        self.interpolation_log.index.name = 'Samples'
+
+        # Save task log to CSV file, with robot_id in filename
+        # First check if the logs directory exists, if not, create it
+        try:
+            os.makedirs(package_path + '/logs/'+self.trial_name+'/')
+        except FileExistsError:
+            pass
+
+        # Save the file
+        self.interpolation_log.to_csv(package_path + '/logs/'+self.trial_name+'/interpolation_log.csv')
+        rospy.loginfo("Interpolation log saved to " + package_path + '/logs/'+self.trial_name+'/interpolation_log.csv')
+        
+        # self.numSamples += 1
+
+        if self.sampling_algo.lower() == "dynamic":
+            # Check if all cells of the course-grain sampling grid have been sampled
+            if np.all(self.sampled_mask == -1):
+                rospy.loginfo("All cells of the course-grain sampling grid have been sampled. Terminating...")
+                self.sampling_time_budget_elapsed_pub.publish(True)
+        self.sim_time_factor_pub.publish(increased_sim_speed)
+
+    def metricPubRMSE(self): # Publish Root Mean Squared Error
+        self.RMSEpub.publish(self.RMSE)
+        rospy.loginfo("Root Mean Squared Error: %.2f" % self.RMSE)
+
+    def metricPubAvgVariance(self): # Publish Average Kriging Variance
+        self.avgVarpub.publish(self.avgVar)
+
+    def metricPubNumSamples(self): # Publish Number of Samples
+        self.numSamplespub.publish(self.numSamples)
+
+
+if __name__ == '__main__':
+    myargv = rospy.myargv(argv=sys.argv)
+
+    if len(myargv) > 0:
+        trial_num = int(myargv[1])
+        num_robots = int(myargv[2])
+        ta_algo = myargv[3]
+        sampling_algo = myargv[4]
+        env_crop_factor = int(myargv[5])
+        figures_path = myargv[6]
+        simulator = myargv[7]
+        bid_function = myargv[8]
+        use_queue_sorting = myargv[9]
+        drop_low_variance_tasks = myargv[10]
+        trial_name = myargv[11]
+
+        coordinator = Coordinator(trial_num, num_robots, ta_algo, sampling_algo, env_crop_factor, figures_path, package_path, simulator, bid_function, use_queue_sorting, drop_low_variance_tasks, trial_name)
+    else:
+        rospy.logerr("No args provided")
+        sys.exit(1)
+
+
+
+    # Get list of topics where robots publish their sampled values
+    topics = rospy.get_published_topics()
+    pen_reading_topics = [topic[0] for topic in topics if 'mock_pen_reading' in topic[0]]
+    rospy.loginfo("Subscribing to simulated penetrometer reading topics: " + str(pen_reading_topics))
+    if len(pen_reading_topics) == 0:
+        rospy.logerr("No topics found for simulated penetrometer readings, is the simulation running?")
+        sys.exit(1)
+
+    for topic in pen_reading_topics:
+        rospy.Subscriber(topic, String, coordinator.new_sample_callback)
+
+    rospy.loginfo("Waiting for simulation to start before publishing initial poses")
+    sleep(1)
+
+    # Set initial robot poses according to the chosen alogrithm
+    if robot_init_pose_algorithm == "realistic": # Set robot poses within 5m of the field's gate (Northwestern corner)
+        rospy.loginfo("Setting robot poses using 'realistic' algorithm")
+        for robot in coordinator.robots:
+            pose = Pose()
+            pose.position.x = random.uniform(1, 5)
+            pose.position.y = random.uniform(env_height-6, env_height-1)
+            pose.orientation.w = 1
+
+            coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
+
+            if simulator == "stage_ros":
+                # Convert position from stage coordinates to ROS coordinates
+                pose.position.x = pose.position.x - env_width/2
+                pose.position.y = pose.position.y - env_height/2
+
+            coordinator.robot_pose_pubs[robot].publish(pose)
+            # rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+    elif robot_init_pose_algorithm == "random edge":
+        rospy.loginfo("Setting robot poses using 'random edge' algorithm")
+        for robot in coordinator.robots:
+            # Random edge
+            # 0 = North, 1 = East, 2 = South, 3 = West
+            edge = random.randint(0, 3)
+
+            # Choose random pose within 5m of the edge
+            pose = coordinator.random_edge_pose()
+            coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
+            coordinator.robot_pose_pubs[robot].publish(pose)
+            # rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+    elif robot_init_pose_algorithm == "random edge and robot":
+        rospy.loginfo("Setting robot poses using 'random edge and robot' algorithm")
+        first_robot_pose = Pose()
+        first_robot = True
+
+        for robot in coordinator.robots:
+            if first_robot:
+                pose = coordinator.random_edge_pose()
+                coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
+                coordinator.robot_pose_pubs[robot].publish(pose)
+                # rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+                first_robot_pose = pose
+                first_robot = False
+            else:
+                # Choose random pose within 5m of the edge and the first robot
+                pose = coordinator.random_edge_pose()
+                distance = sqrt((pose.position.x - first_robot_pose.position.x)**2 + (pose.position.y - first_robot_pose.position.y)**2)
+                while distance > 5:
+                    pose = coordinator.random_edge_pose()
+                    distance = sqrt((pose.position.x - first_robot_pose.position.x)**2 + (pose.position.y - first_robot_pose.position.y)**2)
+
+                coordinator.robot_intial_poses[robot] = (pose.position.x, pose.position.y)
+                coordinator.robot_pose_pubs[robot].publish(pose)
+                # rospy.loginfo("Published initial pose of " + robot + " on topic " + coordinator.robot_pose_pubs[robot].name + ": " + str(pose))
+    elif robot_init_pose_algorithm == "random":
+        rospy.loginfo("Setting robot poses using 'random' algorithm")
+        for robot in coordinator.robots:
+            x = random.uniform(1, env_width-1)
+            y = random.uniform(1, env_height-1)
+            coordinator.robot_intial_poses[robot] = (x, y)
+            # rospy.loginfo("Robot " + robot + " initial pose: " + str((x, y)))
+
+            pose = Pose()
+            pose.position.x = random.uniform(1, env_width-1)
+            pose.position.y = random.uniform(1, env_height-1)
+            pose.orientation.w = 1
+
+            if simulator == "stage_ros":
+                # Convert position from stage coordinates to ROS coordinates
+                pose.position.x = pose.position.x - env_width/2
+                pose.position.y = pose.position.y - env_height/2
+
+            coordinator.robot_pose_pubs[robot].publish(pose)
+
+
+    # Wait for robot initial poses to be registered in the simulation
+    rospy.loginfo("Waiting for robot initial poses to be registered in the simulation")
+    sleep(5)
+
+    # Publish to '/sim_initialized' topic
+    rospy.loginfo("Publishing to '/sim_initialized' topic")
+    coordinator.sim_initialized_pub.publish(True)
+
+    # If sampling algorithm is 'dynamic', have each robot sample at its initial position
+    # get initial kriging variance needed to select sampling points
+    if 'dynamic' in str(coordinator.sampling_algo).lower():
+        ta = {}
+        for robot in coordinator.robots:
+            rospy.loginfo("Waiting for message on topic /"+robot+"/robot_pose for initial sampling position")
+            
+            if simulator == "stage_ros":            
+                robot_pose = rospy.wait_for_message("/"+robot+"/amcl_pose", PoseWithCovarianceStamped)
+                robot_position = (robot_pose.pose.pose.position.x, robot_pose.pose.pose.position.y)
+            elif simulator == "virtual_robots":
+                robot_pose = coordinator.robot_poses[robot]
+                rospy.loginfo("Initial sampling position for " + robot + ": " + str(robot_pose.pose.position.x) + ", " + str(robot_pose.pose.position.y))
+                robot_position = (robot_pose.pose.position.x, robot_pose.pose.position.y)
+
+            ta[robot] = [robot_position]
+        coordinator.publish_ta(ta)
+
+        # Wait for robots to finish sampling initial positions
+        rospy.sleep(20)
+
+        # # Run initial dynamic sampling
+        # coordinator.tasks = coordinator.dynamic_sampling()
+
+    # If sampling algorithm is 'random', create random tasks
+    if 'random' in str(coordinator.sampling_algo).lower():
+        coordinator.tasks = coordinator.random_sampling()
+    
+    # Initial task allocation
+    if "round" in str(coordinator.ta_algo).lower() or "robin" in str(coordinator.ta_algo).lower() or "rr" in str(coordinator.ta_algo).lower():
+        # Get Round Robin task allocations
+        task_allocations = coordinator.rr_ta()
+        # rospy.loginfo("Round robin task allocations: " + str(task_allocations))
+        # plt.close()
+        # plt.imshow(ground_truth, origin="lower")
+        # for robot in coordinator.robots:
+        #     if robot == "robot_0":
+        #         plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'ro')
+        #     elif robot == "robot_1":
+        #         plt.plot([task[0] for task in task_allocations[robot]], [task[1] for task in task_allocations[robot]], 'go')
+        # plt.savefig(package_path+'/figures/round_robin_task_allocation.png')
+    elif "SSI" in str(coordinator.ta_algo).upper():
+        task_allocations = coordinator.ssi_ta()
+        # rospy.loginfo("SSI task allocations: " + str(task_allocations))
+    
+    coordinator.publish_ta(task_allocations)
+
+    # Speed up simulation and keep coordinator node running until ROS is shutdown
+    coordinator.sim_time_factor_pub.publish(increased_sim_speed)
+    rospy.spin()

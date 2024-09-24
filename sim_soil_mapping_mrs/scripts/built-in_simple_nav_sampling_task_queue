@@ -1,0 +1,161 @@
+#!/usr/bin/env python
+import math
+import rospy
+import rospkg
+import actionlib
+import pickle
+import copy
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from std_msgs.msg import String
+from geometry_msgs.msg import Pose
+from nav_msgs.msg import Odometry
+# TODO: Add rospy_message_converter to rosdep dependencies
+from rospy_message_converter import message_converter
+
+# TODO:
+#  - Retry failed goals x times, then cancel goal and remove from queue
+#  - Insertion heuristic
+
+rospack = rospkg.RosPack()
+package_path = rospack.get_path('sim_soil_mapping_mrs')
+node_name = 'sampling_task_queue'
+rospy.init_node(node_name)
+namespace = rospy.get_namespace()
+print(namespace)
+
+# Simplified navigation - teleports the robots to the goal positions after a delay calculated from the distance to the
+# goal and a constant velocity, this may be used to enable faster simulation, as move_base bottlenecked sim performance.
+# use_simplified_nav = rospy.get_param(namespace+node_name+'/use_simplified_nav')
+use_simplified_nav = True  # Simply set as `True` for now to debug. TODO: implement this as a ROS param, as above
+
+if not use_simplified_nav:
+    client = actionlib.SimpleActionClient(namespace+'move_base', MoveBaseAction)
+    client.wait_for_server()
+
+goal_queue = []
+robot_speed = 0.4  # m/s
+goal_queue_pub = rospy.Publisher(namespace+node_name+"/goal_queue", String, queue_size=1)
+cmd_pose_pub = rospy.Publisher(namespace+'cmd_pose', Pose, queue_size=1)
+global current_pose
+
+
+def stage_ground_truth_pose_cb(odom_msg):
+    global current_pose
+    current_pose = odom_msg.pose.pose
+
+
+stage_ground_truth_pose_sub = rospy.Subscriber(namespace+'base_pose_ground_truth', Odometry,
+                                               stage_ground_truth_pose_cb)
+
+
+def queue_nav_goal_callback(data):
+    rospy.loginfo("New goal received: " + str(data.target_pose.pose.position.x) + "," +
+                  str(data.target_pose.pose.position.y))
+
+    goal_queue.append(data)
+
+    # Human-readable goal queue
+    goal_queue_hr = []
+    for goal in goal_queue:
+        goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+
+    if len(goal_queue) > 0:
+        goal_queue_pub.publish(str(goal_queue_hr))
+        rospy.loginfo("\nNav goal queue:")
+        for g in range(len(goal_queue)):
+            rospy.loginfo("\nGoal at queue position " + str(g) + ":\n" + str(goal_queue[g].target_pose.pose.position))
+
+
+def pub_mock_pen_reading(goal):
+    # If nav. was successful, stop for 5 seconds and read data indexed by position
+    rospy.loginfo("Taking penetrometer reading...")
+    if use_simplified_nav:
+        # TODO: Calculate this offset as half of the environment size, rather than hard-coding it
+        pose_x = goal.target_pose.pose.position.x
+        pose_y = goal.target_pose.pose.position.y
+        data_x, data_y = math.floor(pose_x), math.floor(pose_y)
+    else:
+        pose_x = goal.target_pose.pose.position.x
+        pose_y = goal.target_pose.pose.position.y
+        data_x, data_y = math.floor(pose_x), math.floor(pose_y)
+    rospy.sleep(1)
+    mock_reading = mock_pen_data[data_y, data_x]
+    reading_dict = {'robot_id': namespace.strip("/"), 'x': pose_x, 'y': pose_y, 'reading': mock_reading}
+    rospy.loginfo(namespace[1:-1] + " sampled " + str(reading_dict))
+    reading_msg = message_converter.convert_dictionary_to_ros_message('std_msgs/String',
+                                                                      {'data': str(reading_dict)})
+    mock_pen_reading_pub.publish(reading_msg)
+
+
+def queue_nav_goal_listener():
+    rospy.Subscriber(namespace+node_name+'/add_goal', MoveBaseGoal, queue_nav_goal_callback)
+
+    r = rospy.Rate(1)
+    while not rospy.is_shutdown():
+        if len(goal_queue) > 0:
+            # Publish human-readable goal queue
+            goal_queue_hr = []
+            for goal in goal_queue:
+                goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+            goal_queue_pub.publish(str(goal_queue_hr))
+
+            goal = goal_queue[0]
+            if not use_simplified_nav:
+                client.send_goal(goal)
+
+            rospy.loginfo("Executing goal: " + str(goal.target_pose.pose.position))
+
+            rospy.loginfo("Sending navigation goal for sampling position...")
+            if not use_simplified_nav:
+                wait = client.wait_for_result()
+            else:
+                # Calculate time to goal
+                current_pose_x = current_pose.position.x
+                current_pose_y = current_pose.position.y
+
+                goal_pose_x = goal.target_pose.pose.position.x
+                goal_pose_y = goal.target_pose.pose.position.y
+
+                distance_to_goal = math.sqrt((goal_pose_x - current_pose_x) ** 2 + (goal_pose_y - current_pose_y) ** 2)
+
+                time_to_goal = distance_to_goal * robot_speed  # Calculate time to travel to the goal in seconds
+                rospy.loginfo("Robot navigating for " + str(time_to_goal) + " seconds to goal...")
+                rospy.sleep(time_to_goal)
+
+                # TODO: Calculate this offset as half of the environment size, rather than hard-coding it
+                offset_goal = copy.deepcopy(goal)
+                offset_goal.target_pose.pose.position.x = offset_goal.target_pose.pose.position.x - 162.0
+                offset_goal.target_pose.pose.position.y = offset_goal.target_pose.pose.position.y - 110.0
+                cmd_pose_pub.publish(offset_goal.target_pose.pose)
+
+            if not use_simplified_nav:
+                if not wait:
+                    rospy.logerr("Cannot reach navigation server!")
+                else:
+                    state = client.get_state()
+                    if state == 3:
+                        pub_mock_pen_reading(goal)
+                    else:
+                        rospy.logerr("Navigation goal failed!")
+            else:
+                pub_mock_pen_reading(goal)
+
+            goal_queue.pop(0)
+
+            # Publish the human-readable goal queue without the completed goal
+            goal_queue_hr = []
+            for goal in goal_queue:
+                goal_queue_hr.append([goal.target_pose.pose.position.x, goal.target_pose.pose.position.y])
+            goal_queue_pub.publish(str(goal_queue_hr))
+        else:
+            goal_queue_pub.publish(str([]))
+        r.sleep()
+    rospy.spin()
+
+
+if __name__ == '__main__':
+    with open(package_path+'/include/sim_soil_mapping_mrs/ground_truth/interpolated_jaime_compaction_0cm_kpas.pickle',
+              'rb') as f:
+        mock_pen_data = pickle.load(f)
+    mock_pen_reading_pub = rospy.Publisher(namespace + node_name + "/mock_pen_reading", String, queue_size=1)
+    queue_nav_goal_listener()
