@@ -22,8 +22,8 @@ To run an example sampling mission use the command:
 rosrun sim_soil_mapping_mrs run_single_trial.py
 ```
 
-## Run ICRA '25 Soil Compaction Sampling Trials
-To replicate the soil compaction mapping trials run for the ICRA '25 submission use the command:
+## Run MDPI Robotics Soil Compaction Sampling Trials
+To replicate the soil compaction mapping trials run for the MDPI Robotics submission use the command:
 ```
 rosrun sim_soil_mapping_mrs run_bid_func_trials.py
 ```
